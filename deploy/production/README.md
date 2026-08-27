@@ -63,3 +63,13 @@ Cloudflare Tunnel routes `support.olcepks.ca` to
 `http://100.105.41.61:9000`. The origin is reachable only over Tailscale and
 passes through the bundled Nginx proxy. No router port forwarding or public
 origin IP is required.
+
+Install the remotely managed tunnel connector with its scoped token:
+
+```bash
+sudo cloudflared service install <tunnel-token>
+```
+
+The LibreDesk General Settings root URL must be
+`https://support.olcepks.ca` so email links, OAuth callbacks, the help center,
+and live-chat assets use the public hostname.
