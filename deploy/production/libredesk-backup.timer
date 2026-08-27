@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the LibreDesk application-consistent backup nightly
+
+[Timer]
+OnCalendar=*-*-* 02:15:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=libredesk-backup.service
+
+[Install]
+WantedBy=timers.target

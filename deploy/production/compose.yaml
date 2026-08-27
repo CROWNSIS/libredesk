@@ -1,0 +1,122 @@
+name: libredesk
+
+services:
+  app:
+    image: ${LIBREDESK_IMAGE:-libredesk/libredesk:v2.8.0@sha256:1e5e9f766a8f240cb34cc1e923ebc7f3106971c3408e5c334039ad38658bce78}
+    container_name: libredesk_app
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:${LIBREDESK_PORT:-9000}:9000"
+    environment:
+      LIBREDESK_APP__LOG_LEVEL: info
+      LIBREDESK_APP__ENV: prod
+      LIBREDESK_APP__CHECK_UPDATES: "true"
+      LIBREDESK_APP__ENCRYPTION_KEY: ${LIBREDESK_ENCRYPTION_KEY:?set in .env}
+      LIBREDESK_APP__SERVER__ADDRESS: 0.0.0.0:9000
+      LIBREDESK_APP__SERVER__DISABLE_SECURE_COOKIES: "false"
+      LIBREDESK_UPLOAD__PROVIDER: fs
+      LIBREDESK_UPLOAD__FS__UPLOAD_PATH: /libredesk/uploads
+      LIBREDESK_DB__HOST: db
+      LIBREDESK_DB__PORT: "5432"
+      LIBREDESK_DB__USER: ${POSTGRES_USER:-libredesk}
+      LIBREDESK_DB__PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      LIBREDESK_DB__DATABASE: ${POSTGRES_DB:-libredesk}
+      LIBREDESK_DB__SSL_MODE: disable
+      LIBREDESK_REDIS__ADDRESS: redis:6379
+      LIBREDESK_REDIS__PASSWORD: ${REDIS_PASSWORD:?set in .env}
+    command:
+      - sh
+      - -c
+      - >-
+        ./libredesk --install --idempotent-install --yes --config=/libredesk/config.toml &&
+        ./libredesk --upgrade --yes --config=/libredesk/config.toml &&
+        exec ./libredesk --config=/libredesk/config.toml
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend
+      - egress
+    volumes:
+      - ./data/uploads:/libredesk/uploads:rw
+      - ./config.toml:/libredesk/config.toml:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    cpus: 2
+    stop_grace_period: 30s
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  db:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    container_name: libredesk_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-libredesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-libredesk}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - backend
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    cpus: 1.5
+    stop_grace_period: 60s
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    container_name: libredesk_redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set in .env}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - backend
+    volumes:
+      - redis-data:/data
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    cpus: 0.5
+    stop_grace_period: 30s
+    logging: *default-logging
+
+networks:
+  backend:
+    internal: true
+  egress:
+
+volumes:
+  postgres-data:
+  redis-data:

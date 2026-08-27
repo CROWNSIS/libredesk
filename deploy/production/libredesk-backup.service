@@ -1,0 +1,13 @@
+[Unit]
+Description=Back up LibreDesk database, uploads, and encryption configuration
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/libredesk
+ExecStart=%h/libredesk/backup.sh
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=%h/libredesk/backups
+NoNewPrivileges=true

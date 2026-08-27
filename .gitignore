@@ -8,4 +8,5 @@ uploads
 .env
 dist/
 .vscode/
+.playwright-cli/
 static/widget.min.js
