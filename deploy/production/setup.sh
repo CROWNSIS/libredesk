@@ -18,6 +18,7 @@ install -d -m 0750 "${deployment_dir}/data/uploads"
 install -d -m 0700 "${deployment_dir}/backups"
 install -m 0640 "${script_dir}/compose.yaml" "${deployment_dir}/compose.yaml"
 install -m 0644 "${script_dir}/config.production.toml" "${deployment_dir}/config.toml"
+install -m 0644 "${script_dir}/nginx.conf" "${deployment_dir}/nginx.conf"
 install -m 0750 "${script_dir}/backup.sh" "${deployment_dir}/backup.sh"
 install -m 0750 "${script_dir}/deploy-image.sh" "${deployment_dir}/deploy-image.sh"
 
@@ -31,9 +32,14 @@ if [[ ! -f "${deployment_dir}/.env" ]]; then
     echo "LIBREDESK_ENCRYPTION_KEY=$(openssl rand -hex 16)"
     echo "LIBREDESK_SYSTEM_USER_PASSWORD=Ld-$(openssl rand -hex 22)-9A!"
     echo "LIBREDESK_PORT=9000"
+    echo "LIBREDESK_TAILSCALE_IP=100.105.41.61"
   } > "${deployment_dir}/.env"
 fi
 chmod 0600 "${deployment_dir}/.env"
+
+if ! grep -q '^LIBREDESK_TAILSCALE_IP=' "${deployment_dir}/.env"; then
+  echo "LIBREDESK_TAILSCALE_IP=100.105.41.61" >> "${deployment_dir}/.env"
+fi
 
 set -a
 source "${deployment_dir}/.env"

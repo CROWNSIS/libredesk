@@ -1,9 +1,8 @@
 # LibreDesk Production Deployment
 
 This deployment runs LibreDesk v2.8.0 with PostgreSQL 17 and Redis 7. All
-routine deployment work is performed by `onionlake-admin`. The application is
-bound to localhost so it must be accessed through a trusted HTTPS reverse
-proxy or Tailscale Serve.
+routine deployment work is performed by `onionlake-admin`. LibreDesk is
+reachable only through the bundled reverse proxy.
 
 ## Security model
 
@@ -13,7 +12,10 @@ proxy or Tailscale Serve.
   generated on the server and stored in `~/libredesk/.env` with mode 0600.
 - Redis authentication and persistent append-only storage are enabled.
 - Containers use resource limits, bounded logs, and `no-new-privileges`.
-- The application port is available only at `127.0.0.1:9000`.
+- LibreDesk has no host-published port. A pinned Nginx container publishes
+  port 9000 only on loopback and the VM's Tailscale address.
+- Nginx forwards Cloudflare's authenticated client address as `X-Client-IP`,
+  as required for LibreDesk rate limiting and audit logs.
 - `onionlake-admin` is the only non-root account in the `docker` group. Docker
   group membership is equivalent to root-level host access and must not be
   granted to application or untrusted accounts.
@@ -57,6 +59,7 @@ then rolls back automatically if the application does not become healthy.
 
 ## Public ingress
 
-The official LibreDesk documentation recommends Nginx and requires the proxy
-to set `X-Client-IP`. Start from `nginx.conf.example`, add the production
-hostname and TLS certificate, and expose ports 80/443 only after DNS is ready.
+Cloudflare Tunnel routes `support.olcepks.ca` to
+`http://100.105.41.61:9000`. The origin is reachable only over Tailscale and
+passes through the bundled Nginx proxy. No router port forwarding or public
+origin IP is required.
