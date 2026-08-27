@@ -19,6 +19,7 @@ install -d -m 0700 "${deployment_dir}/backups"
 install -m 0640 "${script_dir}/compose.yaml" "${deployment_dir}/compose.yaml"
 install -m 0644 "${script_dir}/config.production.toml" "${deployment_dir}/config.toml"
 install -m 0750 "${script_dir}/backup.sh" "${deployment_dir}/backup.sh"
+install -m 0750 "${script_dir}/deploy-image.sh" "${deployment_dir}/deploy-image.sh"
 
 if [[ ! -f "${deployment_dir}/.env" ]]; then
   umask 077

@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - oledu-production
+    paths-ignore:
+      - "deploy/**"
+      - "**/*.md"
   pull_request:
     branches:
       - oledu-production

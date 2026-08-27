@@ -42,6 +42,19 @@ dump, uploads archive, environment/encryption configuration, and checksums to
 snapshots provide a second recovery layer, but application-consistent database
 dumps remain required before every LibreDesk upgrade.
 
+## Deploying an OLEDU image
+
+The hosted GitHub Actions pipeline publishes commit-tagged images to GHCR. Get
+the digest for the tested image, then deploy it as `onionlake-admin`:
+
+```bash
+~/libredesk/deploy-image.sh ghcr.io/crownsis/libredesk@sha256:<digest>
+```
+
+The script accepts only immutable CROWNSIS image digests. It backs up the
+database, uploads, and encryption configuration before changing the image,
+then rolls back automatically if the application does not become healthy.
+
 ## Public ingress
 
 The official LibreDesk documentation recommends Nginx and requires the proxy
