@@ -1,0 +1,95 @@
+name: OLEDU image
+
+on:
+  push:
+    branches:
+      - oledu-production
+  pull_request:
+    branches:
+      - oledu-production
+  workflow_dispatch:
+
+concurrency:
+  group: oledu-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test-build-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: libredesk
+          POSTGRES_PASSWORD: libredesk
+          POSTGRES_DB: libredesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U libredesk"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      LIBREDESK_TEST_DB_DSN: postgres://libredesk:libredesk@127.0.0.1:5432/libredesk?sslmode=disable&connect_timeout=3
+      IMAGE_NAME: ghcr.io/crownsis/libredesk
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.25.0"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.3
+
+      - name: Test
+        run: make test
+
+      - name: Build LibreDesk binary
+        env:
+          LIBREDESK_VERSION: v2.8.0-oledu.${{ github.run_number }}
+        run: make build
+
+      - name: Set up Docker Buildx
+        if: github.event_name != 'pull_request'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:oledu-production
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=v2.8.0-oledu.${{ github.run_number }}
+          cache-from: type=gha,scope=oledu-amd64
+          cache-to: type=gha,mode=max,scope=oledu-amd64
