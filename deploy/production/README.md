@@ -58,7 +58,8 @@ Nginx, Cloudflare Tunnel, or a host-published port.
 
 Customer-facing completion and background embedding run in separate Ollama
 services. Completion gets up to four CPUs and a 30-minute keep-alive; embedding
-is capped at one CPU so an article reindex cannot monopolize the chat queue.
+is capped at one CPU and has two request slots so an article reindex cannot
+block the short query embedding needed to authorize a live support question.
 Each service loads only its own active model. AI agent work is serialized with
 `ai_agent.worker_count=1`, and both contexts default to 4096 tokens. Larger
 contexts consume more RAM and should be load-tested before raising the relevant
