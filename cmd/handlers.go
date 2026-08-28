@@ -444,7 +444,7 @@ func serveWidgetIndexPage(r *fastglue.Request) error {
 
 	// CSP headers if trusted domains is set.
 	if config, err := getWidgetConfig(r); err == nil && len(config.TrustedDomains) > 0 {
-		csp := "frame-ancestors 'self' " + strings.Join(config.TrustedDomains, " ")
+		csp := "frame-ancestors 'self' " + strings.Join(widgetFrameAncestors(config.TrustedDomains), " ")
 		r.RequestCtx.Response.Header.Set("Content-Security-Policy", csp)
 	}
 
@@ -457,6 +457,22 @@ func serveWidgetIndexPage(r *fastglue.Request) error {
 	r.RequestCtx.Response.SetBodyRaw(file.ReadBytes())
 
 	return nil
+}
+
+// widgetFrameAncestors converts the scheme-independent trusted-domain setting
+// into valid CSP host sources. This keeps CSP enforcement consistent with
+// IsOriginTrusted and permits local HTTP development without weakening the
+// configured host allowlist.
+func widgetFrameAncestors(domains []string) []string {
+	sources := make([]string, 0, len(domains)*2)
+	for _, domain := range domains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" {
+			continue
+		}
+		sources = append(sources, "https://"+domain, "http://"+domain)
+	}
+	return sources
 }
 
 // serveStaticFiles serves static assets from the filesystem.
