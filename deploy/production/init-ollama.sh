@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-: "${OLLAMA_COMPLETION_MODEL:=qwen3:4b-instruct}"
+: "${OLLAMA_COMPLETION_MODEL:=qwen3:1.7b}"
 : "${OLLAMA_EMBEDDING_MODEL:=qwen3-embedding:0.6b}"
 
 export OLLAMA_HOST=127.0.0.1:11434

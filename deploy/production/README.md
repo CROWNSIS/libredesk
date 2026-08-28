@@ -49,7 +49,7 @@ Linux/amd64 manifest digest returned by Docker Hub on 2026-08-27. This digest
 is intentionally specific to VM 106's architecture. Verify and update both the
 version and digest deliberately when upgrading Ollama.
 
-The idempotent `ollama-init` service pulls `qwen3:4b-instruct` for completions
+The idempotent `ollama-init` service pulls `qwen3:1.7b` for completions
 and `qwen3-embedding:0.6b` for 1024-dimensional multilingual embeddings. Override `OLLAMA_COMPLETION_MODEL` and
 `OLLAMA_EMBEDDING_MODEL` in `.env` before running setup to use different model
 names. LibreDesk provider settings must use `http://ollama:11434/v1`; this URL

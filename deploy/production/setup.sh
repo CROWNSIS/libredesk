@@ -36,7 +36,7 @@ if [[ ! -f "${deployment_dir}/.env" ]]; then
     echo "LIBREDESK_SYSTEM_USER_PASSWORD=Ld-$(openssl rand -hex 22)-9A!"
     echo "LIBREDESK_PORT=9000"
     echo "LIBREDESK_TAILSCALE_IP=100.105.41.61"
-    echo "OLLAMA_COMPLETION_MODEL=qwen3:4b-instruct"
+    echo "OLLAMA_COMPLETION_MODEL=qwen3:1.7b"
     echo "OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b"
   } > "${deployment_dir}/.env"
 fi

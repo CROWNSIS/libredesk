@@ -106,7 +106,7 @@ services:
     environment:
       HOME: /tmp
       OLLAMA_MODELS: /models
-      OLLAMA_COMPLETION_MODEL: ${OLLAMA_COMPLETION_MODEL:-qwen3:4b-instruct}
+      OLLAMA_COMPLETION_MODEL: ${OLLAMA_COMPLETION_MODEL:-qwen3:1.7b}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-qwen3-embedding:0.6b}
     networks:
       - backend
