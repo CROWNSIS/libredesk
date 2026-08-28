@@ -28,7 +28,7 @@ const (
 
 	// overallRequestTimeout bounds one logical request across all retry attempts; fasthttp request
 	// contexts carry no deadline, so without this a hanging provider stalls synchronous callers for minutes.
-	overallRequestTimeout = 60 * time.Second
+	overallRequestTimeout = 90 * time.Second
 
 	// Reasoning models reject max_tokens and non-default temperature with structured 400s;
 	// those requests are adjusted and retried instead of surfacing the error.

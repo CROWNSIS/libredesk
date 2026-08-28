@@ -38,7 +38,7 @@ const (
 	// Run clock: caps one full agent run - every completion call, retry, and tool call
 	// combined. The per-call 60s clock (ai.overallRequestTimeout) nests inside it.
 	emailRunTimeout    = 3 * time.Minute
-	livechatRunTimeout = 90 * time.Second
+	livechatRunTimeout = 2 * time.Minute
 
 	ungroundedReply = "I can only answer questions covered by this application's help center, and I don't have a matching article for that request. You can try another product question or reply **human** to contact support."
 
@@ -327,8 +327,11 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	m.lo.Debug("ai agent verification state", "conversation_uuid", conv.UUID, "channel", conv.InboxChannel, "contact_type", conv.Contact.Type, "has_email", conv.Contact.Email.String != "", "verified", runVerified)
 
 	outcome := &runOutcome{}
+	// Grounding has already retrieved and injected the eligible help-centre excerpts above.
+	// Do not expose the search tool again: a second model-driven search adds a redundant
+	// completion round-trip on CPU-hosted models and can broaden the evidence set after the
+	// server-side scope gate has made its decision.
 	tools := []ai.Tool{
-		&searchKnowledgeTool{m: m, helpCenterIDs: assistant.HelpCenterIDs},
 		&resolveTool{m: m, conv: conv, outcome: outcome},
 	}
 	if assistant.HandoffEnabled {
@@ -580,11 +583,10 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 		systemPrompt += "\n\n" + groundingSystemNote
 		history = append([]aimodels.ChatMessage{{Role: aimodels.RoleUser, Content: knowledgeContextBlock(hits)}}, history...)
 	}
-	tools := []ai.Tool{&searchKnowledgeTool{m: m, helpCenterIDs: a.HelpCenterIDs, collect: func(rs []aimodels.SearchResult) { hits = append(hits, rs...) }}}
 	runCtx, cancel := context.WithTimeout(ctx, livechatRunTimeout)
 	defer cancel()
-	// Preview is search-only: no custom tools (empty allowed set), no built-in, no side effects.
-	answer, err := m.ai.RunAgentWithTools(runCtx, systemPrompt, history, m.maxSteps, ai.ToolContext{}, []int{}, false, false, tools)
+	// Preview has the same server-retrieved context as a live run and has no tools or side effects.
+	answer, err := m.ai.RunAgentWithTools(runCtx, systemPrompt, history, m.maxSteps, ai.ToolContext{}, []int{}, false, false, nil)
 	if err != nil {
 		return "", nil, err
 	}

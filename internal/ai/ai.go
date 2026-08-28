@@ -164,7 +164,7 @@ func New(opts Opts) (*Manager, error) {
 			},
 		},
 		providerHTTPClient: &http.Client{
-			Timeout:   60 * time.Second,
+			Timeout:   90 * time.Second,
 			Transport: transport,
 		},
 	}
