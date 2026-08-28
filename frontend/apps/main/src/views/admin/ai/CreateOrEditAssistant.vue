@@ -77,7 +77,13 @@
                       :key="`${source.type}-${source.id}`"
                       class="flex items-center justify-between text-sm"
                     >
-                      <span class="text-foreground">
+                      <a
+                        v-if="source.url"
+                        :href="source.url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="text-foreground underline-offset-4 hover:underline"
+                      >
                         {{ source.title }}
                         <span class="ml-2 text-xs text-muted-foreground">
                           {{
@@ -86,7 +92,8 @@
                               : t('admin.ai.snippets', 1)
                           }}
                         </span>
-                      </span>
+                      </a>
+                      <span v-else class="text-foreground">{{ source.title }}</span>
                       <span class="text-xs text-muted-foreground">
                         {{ Math.round(source.score * 100) }}%
                       </span>

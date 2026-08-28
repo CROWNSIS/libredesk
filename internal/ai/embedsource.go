@@ -12,11 +12,12 @@ import (
 
 // embedItem is one indexable row, normalized across the content types that can be embedded.
 type embedItem struct {
-	ID          int
-	Title       string
-	Content     string
-	Fingerprint string
-	Eligible    bool
+	ID           int
+	HelpCenterID int
+	Title        string
+	Content      string
+	Fingerprint  string
+	Eligible     bool
 }
 
 // genKey identifies a reindex generation counter for one row of one source type.
@@ -79,11 +80,12 @@ func (m *Manager) reindexItemWith(ctx context.Context, src embedSource, item emb
 	// Unchanged content on the same model is already embedded; don't pay the provider again.
 	fingerprint := itemFingerprint(item, baseURL, model, dimensions)
 	if item.Fingerprint == fingerprint {
+		m.index.setSourceHelpCenterID(src.sourceType(), item.ID, item.HelpCenterID)
 		m.lo.Debug("reindex skipped, fingerprint unchanged", "source_type", src.sourceType(), "id", item.ID)
 		return
 	}
 
-	indexed, err := m.embedSource(ctx, src.sourceType(), item.ID, item.Title, item.Content)
+	indexed, err := m.embedSource(ctx, src.sourceType(), item.ID, item.HelpCenterID, item.Title, item.Content)
 	if err != nil {
 		m.lo.Error("error indexing content", "error", err, "source_type", src.sourceType(), "id", item.ID)
 		return

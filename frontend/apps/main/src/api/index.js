@@ -473,6 +473,7 @@ const updateAITool = (id, data) => http.put(`/api/v1/ai/tools/${id}`, data)
 const deleteAITool = (id) => http.delete(`/api/v1/ai/tools/${id}`)
 const getAIAssistants = () => http.get('/api/v1/ai/assistants')
 const getAIAssistantsCompact = () => http.get('/api/v1/ai/assistants/compact')
+const getAIHelpCentersCompact = () => http.get('/api/v1/ai/help-centers/compact')
 const getAIAssistant = (id) => http.get(`/api/v1/ai/assistants/${id}`)
 const createAIAssistant = (data) =>
   http.post('/api/v1/ai/assistants', data, {
@@ -751,6 +752,7 @@ export default {
   deleteAITool,
   getAIAssistants,
   getAIAssistantsCompact,
+  getAIHelpCentersCompact,
   getAIAssistant,
   createAIAssistant,
   updateAIAssistant,

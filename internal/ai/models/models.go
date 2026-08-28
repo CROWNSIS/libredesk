@@ -92,6 +92,7 @@ type KnowledgeBaseItem struct {
 // HelpArticleItem is the minimal help_articles projection the embedding reconciler needs.
 type HelpArticleItem struct {
 	ID                  int    `db:"id"`
+	HelpCenterID        int    `db:"help_center_id"`
 	Title               string `db:"title"`
 	Content             string `db:"content"`
 	Status              string `db:"status"`
@@ -135,6 +136,8 @@ type Embedding struct {
 	ChunkText  string `db:"chunk_text"`
 	Embedding  []byte `db:"embedding"`
 	Dimensions int    `db:"dimensions"`
+	// HelpCenterID is joined from the article collection when the in-memory index loads.
+	HelpCenterID int `db:"help_center_id"`
 }
 
 // TagRef is a tag id and name.
@@ -145,10 +148,19 @@ type TagRef struct {
 
 // SearchResult is one hit from the in-memory embedding search.
 type SearchResult struct {
-	SourceType string  `json:"source_type"`
-	SourceID   int     `json:"source_id"`
-	ChunkText  string  `json:"chunk_text"`
-	Score      float64 `json:"score"`
+	SourceType  string  `json:"source_type"`
+	SourceID    int     `json:"source_id"`
+	SourceTitle string  `json:"source_title,omitempty"`
+	SourceURL   string  `json:"source_url,omitempty"`
+	ChunkText   string  `json:"chunk_text"`
+	Score       float64 `json:"score"`
+}
+
+type HelpArticleSource struct {
+	Title          string `db:"title"`
+	HelpCenterSlug string `db:"help_center_slug"`
+	Locale         string `db:"locale"`
+	ArticleSlug    string `db:"article_slug"`
 }
 
 // ChatMessage is one OpenAI-compatible chat message.

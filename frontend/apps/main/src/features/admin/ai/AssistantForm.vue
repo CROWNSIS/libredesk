@@ -134,6 +134,63 @@
       </FormItem>
     </FormField>
 
+    <FormField name="help_center_ids">
+      <FormItem>
+        <FormLabel>{{ t('admin.ai.assistant.helpCenters') }}</FormLabel>
+        <FormDescription>{{ t('admin.ai.assistant.helpCentersHint') }}</FormDescription>
+        <FormControl>
+          <div class="max-h-52 space-y-1 overflow-y-auto rounded-md border border-input p-3">
+            <label
+              v-for="helpCenter in helpCenters"
+              :key="helpCenter.id"
+              :for="`help-center-${helpCenter.id}`"
+              class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+            >
+              <Checkbox
+                :id="`help-center-${helpCenter.id}`"
+                :checked="selectedHelpCenterIds.includes(helpCenter.id)"
+                @update:checked="(checked) => toggleHelpCenter(helpCenter.id, checked)"
+              />
+              <span>{{ helpCenter.name }}</span>
+            </label>
+            <p v-if="!helpCenters.length" class="px-2 py-1 text-sm text-muted-foreground">
+              {{ t('admin.ai.assistant.helpCentersEmpty') }}
+            </p>
+          </div>
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    </FormField>
+
+    <FormField name="inbox_ids">
+      <FormItem>
+        <FormLabel>{{ t('admin.ai.assistant.inboxes') }}</FormLabel>
+        <FormDescription>{{ t('admin.ai.assistant.inboxesHint') }}</FormDescription>
+        <FormControl>
+          <div class="max-h-52 space-y-1 overflow-y-auto rounded-md border border-input p-3">
+            <label
+              v-for="inbox in inboxes"
+              :key="inbox.id"
+              :for="`assistant-inbox-${inbox.id}`"
+              class="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-muted"
+            >
+              <Checkbox
+                :id="`assistant-inbox-${inbox.id}`"
+                :checked="selectedInboxIds.includes(inbox.id)"
+                @update:checked="(checked) => toggleInbox(inbox.id, checked)"
+              />
+              <span class="flex-1">{{ inbox.name }}</span>
+              <span class="text-xs text-muted-foreground">{{ inbox.channel }}</span>
+            </label>
+            <p v-if="!inboxes.length" class="px-2 py-1 text-sm text-muted-foreground">
+              {{ t('admin.ai.assistant.inboxesEmpty') }}
+            </p>
+          </div>
+        </FormControl>
+        <FormMessage />
+      </FormItem>
+    </FormField>
+
     <FormField v-slot="{ componentField, handleChange }" name="handoff_enabled">
       <FormItem>
         <SwitchField
@@ -280,12 +337,18 @@ const emitter = useEmitter()
 const formLoading = ref(false)
 const tools = ref([])
 const teams = ref([])
+const helpCenters = ref([])
+const inboxes = ref([])
 const selectedToolIds = ref([])
 const avatarFile = ref(null)
 const avatarPreview = ref('')
 const removeAvatar = ref(false)
 
-const avatarInitials = computed(() => (form.values.name || '').trim().charAt(0).toUpperCase() || 'A')
+const avatarInitials = computed(
+  () => (form.values.name || '').trim().charAt(0).toUpperCase() || 'A'
+)
+const selectedHelpCenterIds = computed(() => form.values.help_center_ids || [])
+const selectedInboxIds = computed(() => form.values.inbox_ids || [])
 
 const onAvatarUpload = (file) => {
   if (!file) return
@@ -318,6 +381,8 @@ const form = useForm({
       fallback_team_id: z.string().optional(),
       handoff_enabled: z.boolean().optional(),
       languages: z.array(z.string()).optional(),
+      help_center_ids: z.array(z.number().int().positive()).optional(),
+      inbox_ids: z.array(z.number().int().positive()).optional(),
       instructions: z.string().optional(),
       guardrails: z.string().optional(),
       enabled: z.boolean().optional()
@@ -333,6 +398,8 @@ const form = useForm({
     fallback_team_id: 'none',
     handoff_enabled: true,
     languages: [],
+    help_center_ids: [],
+    inbox_ids: [],
     instructions: '',
     guardrails: '',
     enabled: true
@@ -345,6 +412,22 @@ const toggleTool = (id, checked) => {
   } else {
     selectedToolIds.value = selectedToolIds.value.filter((t) => t !== id)
   }
+}
+
+const toggleHelpCenter = (id, checked) => {
+  const selected = selectedHelpCenterIds.value
+  form.setFieldValue(
+    'help_center_ids',
+    checked ? [...new Set([...selected, id])] : selected.filter((selectedID) => selectedID !== id)
+  )
+}
+
+const toggleInbox = (id, checked) => {
+  const selected = selectedInboxIds.value
+  form.setFieldValue(
+    'inbox_ids',
+    checked ? [...new Set([...selected, id])] : selected.filter((selectedID) => selectedID !== id)
+  )
 }
 
 watch(
@@ -361,6 +444,8 @@ watch(
         fallback_team_id: values.fallback_team_id ? String(values.fallback_team_id) : 'none',
         handoff_enabled: values.handoff_enabled ?? true,
         languages: [...(values.languages || [])],
+        help_center_ids: [...(values.help_center_ids || [])],
+        inbox_ids: [...(values.inbox_ids || [])],
         instructions: values.instructions || '',
         guardrails: values.guardrails || '',
         enabled: values.enabled ?? true
@@ -378,9 +463,16 @@ watch(
 
 onMounted(async () => {
   try {
-    const [toolsResp, teamsResp] = await Promise.all([api.getAITools(), api.getTeamsCompact()])
+    const [toolsResp, teamsResp, helpCentersResp, inboxesResp] = await Promise.all([
+      api.getAITools(),
+      api.getTeamsCompact(),
+      api.getAIHelpCentersCompact(),
+      api.getInboxes()
+    ])
     tools.value = (toolsResp.data.data || []).filter((tool) => tool.enabled)
     teams.value = teamsResp.data.data || []
+    helpCenters.value = helpCentersResp.data.data || []
+    inboxes.value = (inboxesResp.data.data || []).filter((inbox) => inbox.enabled)
   } catch (error) {
     emitter.emit(EMITTER_EVENTS.SHOW_TOAST, {
       variant: 'destructive',
@@ -405,6 +497,8 @@ const onSubmit = form.handleSubmit(async (values) => {
           : null,
       handoff_enabled: !!values.handoff_enabled,
       languages: values.languages || [],
+      help_center_ids: values.help_center_ids || [],
+      inbox_ids: values.inbox_ids || [],
       instructions: values.instructions || '',
       guardrails: values.guardrails || '',
       enabled: !!values.enabled,

@@ -1,5 +1,5 @@
 // Package aiagent runs autonomous AI assistants that reply to customers on conversations
-// assigned to them, grounded on the shared knowledge base snippet library (there is no per-assistant knowledge).
+// assigned to them, optionally scoped to selected help centers.
 package aiagent
 
 import (
@@ -30,26 +30,36 @@ import (
 var efs embed.FS
 
 type queries struct {
-	GetAssistants           *sqlx.Stmt `query:"get-assistants"`
-	GetAssistant            *sqlx.Stmt `query:"get-assistant"`
-	GetAssistantByUserID    *sqlx.Stmt `query:"get-assistant-by-user-id"`
-	GetAssistantUserIDs     *sqlx.Stmt `query:"get-assistant-user-ids"`
-	InsertAssistantUser     *sqlx.Stmt `query:"insert-assistant-user"`
-	InsertAssistant         *sqlx.Stmt `query:"insert-assistant"`
-	UpdateAssistant         *sqlx.Stmt `query:"update-assistant"`
-	UpdateAssistantUser     *sqlx.Stmt `query:"update-assistant-user"`
-	SoftDeleteAssistantUser *sqlx.Stmt `query:"soft-delete-assistant-user"`
-	DeleteAssistant         *sqlx.Stmt `query:"delete-assistant"`
-	UnassignAssistantConvos *sqlx.Stmt `query:"unassign-assistant-conversations"`
-	GetAssistantTools       *sqlx.Stmt `query:"get-assistant-tools"`
-	GetAllAssistantTools    *sqlx.Stmt `query:"get-all-assistant-tools"`
-	DeleteAssistantTools    *sqlx.Stmt `query:"delete-assistant-tools"`
-	InsertAssistantTool     *sqlx.Stmt `query:"insert-assistant-tool"`
-	CountAITurns            *sqlx.Stmt `query:"count-ai-turns-since-assignment"`
-	GetRecentContactConvos  *sqlx.Stmt `query:"get-recent-contact-conversations"`
-	GetAssistantWindowStats *sqlx.Stmt `query:"get-assistant-window-stats"`
-	GetAssistantExpectation *sqlx.Stmt `query:"get-assistant-expectation-by-user-id"`
-	InsertAIAgentEvent      *sqlx.Stmt `query:"insert-ai-agent-event"`
+	GetAssistants              *sqlx.Stmt `query:"get-assistants"`
+	GetAssistant               *sqlx.Stmt `query:"get-assistant"`
+	GetAssistantByUserID       *sqlx.Stmt `query:"get-assistant-by-user-id"`
+	GetAssistantUserIDs        *sqlx.Stmt `query:"get-assistant-user-ids"`
+	InsertAssistantUser        *sqlx.Stmt `query:"insert-assistant-user"`
+	InsertAssistant            *sqlx.Stmt `query:"insert-assistant"`
+	UpdateAssistant            *sqlx.Stmt `query:"update-assistant"`
+	UpdateAssistantUser        *sqlx.Stmt `query:"update-assistant-user"`
+	SoftDeleteAssistantUser    *sqlx.Stmt `query:"soft-delete-assistant-user"`
+	DeleteAssistant            *sqlx.Stmt `query:"delete-assistant"`
+	UnassignAssistantConvos    *sqlx.Stmt `query:"unassign-assistant-conversations"`
+	GetAssistantTools          *sqlx.Stmt `query:"get-assistant-tools"`
+	GetAllAssistantTools       *sqlx.Stmt `query:"get-all-assistant-tools"`
+	DeleteAssistantTools       *sqlx.Stmt `query:"delete-assistant-tools"`
+	InsertAssistantTool        *sqlx.Stmt `query:"insert-assistant-tool"`
+	HelpCentersExist           *sqlx.Stmt `query:"help-centers-exist"`
+	InboxesExist               *sqlx.Stmt `query:"inboxes-exist"`
+	GetAssistantHelpCenters    *sqlx.Stmt `query:"get-assistant-help-centers"`
+	GetAllAssistantHelpCenters *sqlx.Stmt `query:"get-all-assistant-help-centers"`
+	DeleteAssistantHelpCenters *sqlx.Stmt `query:"delete-assistant-help-centers"`
+	InsertAssistantHelpCenter  *sqlx.Stmt `query:"insert-assistant-help-center"`
+	GetAssistantInboxes        *sqlx.Stmt `query:"get-assistant-inboxes"`
+	GetAllAssistantInboxes     *sqlx.Stmt `query:"get-all-assistant-inboxes"`
+	DeleteAssistantInboxes     *sqlx.Stmt `query:"delete-assistant-inboxes"`
+	InsertAssistantInbox       *sqlx.Stmt `query:"insert-assistant-inbox"`
+	CountAITurns               *sqlx.Stmt `query:"count-ai-turns-since-assignment"`
+	GetRecentContactConvos     *sqlx.Stmt `query:"get-recent-contact-conversations"`
+	GetAssistantWindowStats    *sqlx.Stmt `query:"get-assistant-window-stats"`
+	GetAssistantExpectation    *sqlx.Stmt `query:"get-assistant-expectation-by-user-id"`
+	InsertAIAgentEvent         *sqlx.Stmt `query:"insert-ai-agent-event"`
 
 	InsertFAQSuggestion           *sqlx.Stmt `query:"insert-faq-suggestion"`
 	CountFAQByConversation        *sqlx.Stmt `query:"count-faq-suggestions-by-conversation"`
@@ -152,14 +162,50 @@ func (m *Manager) GetAssistants() ([]models.Assistant, error) {
 	if err != nil {
 		return nil, err
 	}
+	helpCentersByAssistant, err := m.allAssistantLinks(m.q.GetAllAssistantHelpCenters, "help_center_id")
+	if err != nil {
+		return nil, err
+	}
+	inboxesByAssistant, err := m.allAssistantLinks(m.q.GetAllAssistantInboxes, "inbox_id")
+	if err != nil {
+		return nil, err
+	}
 	for i := range assistants {
 		ids := toolsByAssistant[assistants[i].ID]
 		if ids == nil {
 			ids = []int{}
 		}
 		assistants[i].ToolIDs = ids
+		assistants[i].HelpCenterIDs = nonNilIDs(helpCentersByAssistant[assistants[i].ID])
+		assistants[i].InboxIDs = nonNilIDs(inboxesByAssistant[assistants[i].ID])
 	}
 	return assistants, nil
+}
+
+func (m *Manager) allAssistantLinks(stmt *sqlx.Stmt, idColumn string) (map[int][]int64, error) {
+	rows, err := stmt.Queryx()
+	if err != nil {
+		m.lo.Error("error fetching assistant links", "column", idColumn, "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	defer rows.Close()
+	out := make(map[int][]int64)
+	for rows.Next() {
+		var assistantID int
+		var linkedID int64
+		if err := rows.Scan(&assistantID, &linkedID); err != nil {
+			return nil, err
+		}
+		out[assistantID] = append(out[assistantID], linkedID)
+	}
+	return out, rows.Err()
+}
+
+func nonNilIDs(ids []int64) []int64 {
+	if ids == nil {
+		return []int64{}
+	}
+	return ids
 }
 
 // allAssistantTools returns tool ids grouped by assistant id in a single query.
@@ -190,6 +236,14 @@ func (m *Manager) GetAssistant(id int) (models.Assistant, error) {
 		return a, err
 	}
 	a.ToolIDs = toolIDs
+	a.HelpCenterIDs, err = m.getLinkedIDs(m.q.GetAssistantHelpCenters, a.ID)
+	if err != nil {
+		return a, err
+	}
+	a.InboxIDs, err = m.getLinkedIDs(m.q.GetAssistantInboxes, a.ID)
+	if err != nil {
+		return a, err
+	}
 	return a, nil
 }
 
@@ -245,7 +299,20 @@ func (m *Manager) GetAssistantByUserID(userID int) (models.Assistant, error) {
 		return a, err
 	}
 	a.ToolIDs = toolIDs
+	a.HelpCenterIDs, err = m.getLinkedIDs(m.q.GetAssistantHelpCenters, a.ID)
+	if err != nil {
+		return a, err
+	}
+	a.InboxIDs, err = m.getLinkedIDs(m.q.GetAssistantInboxes, a.ID)
+	if err != nil {
+		return a, err
+	}
 	return a, nil
+}
+
+// AllowsInbox is a fail-closed server-side assignment guard.
+func (m *Manager) AllowsInbox(a models.Assistant, inboxID int) bool {
+	return slices.Contains(a.InboxIDs, int64(inboxID))
 }
 
 // AssistantExpectation returns the assistant's widget note, empty if none.
@@ -285,6 +352,12 @@ func (m *Manager) CreateAssistant(a models.Assistant) (models.Assistant, error) 
 	if err := insertTools(tx, m.q.InsertAssistantTool, id, a.ToolIDs); err != nil {
 		m.lo.Error("error linking assistant tools", "error", err)
 		return models.Assistant{}, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	if err := insertLinks(tx, m.q.InsertAssistantHelpCenter, id, a.HelpCenterIDs); err != nil {
+		return models.Assistant{}, m.linkError("help centers", err)
+	}
+	if err := insertLinks(tx, m.q.InsertAssistantInbox, id, a.InboxIDs); err != nil {
+		return models.Assistant{}, m.linkError("inboxes", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -329,6 +402,18 @@ func (m *Manager) UpdateAssistant(id int, a models.Assistant) (models.Assistant,
 	if err := insertTools(tx, m.q.InsertAssistantTool, id, a.ToolIDs); err != nil {
 		m.lo.Error("error linking assistant tools", "error", err)
 		return models.Assistant{}, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	if _, err := tx.Stmtx(m.q.DeleteAssistantHelpCenters).Exec(id); err != nil {
+		return models.Assistant{}, m.linkError("help centers", err)
+	}
+	if err := insertLinks(tx, m.q.InsertAssistantHelpCenter, id, a.HelpCenterIDs); err != nil {
+		return models.Assistant{}, m.linkError("help centers", err)
+	}
+	if _, err := tx.Stmtx(m.q.DeleteAssistantInboxes).Exec(id); err != nil {
+		return models.Assistant{}, m.linkError("inboxes", err)
+	}
+	if err := insertLinks(tx, m.q.InsertAssistantInbox, id, a.InboxIDs); err != nil {
+		return models.Assistant{}, m.linkError("inboxes", err)
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -401,6 +486,29 @@ func (m *Manager) getTools(assistantID int) ([]int, error) {
 	return ids, nil
 }
 
+func (m *Manager) getLinkedIDs(stmt *sqlx.Stmt, assistantID int) ([]int64, error) {
+	ids := []int64{}
+	if err := stmt.Select(&ids, assistantID); err != nil {
+		m.lo.Error("error fetching assistant links", "assistant_id", assistantID, "error", err)
+		return nil, envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+	}
+	return ids, nil
+}
+
+func insertLinks(tx *sqlx.Tx, stmt *sqlx.Stmt, assistantID int, ids []int64) error {
+	for _, id := range ids {
+		if _, err := tx.Stmtx(stmt).Exec(assistantID, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Manager) linkError(kind string, err error) error {
+	m.lo.Error("error linking assistant", "kind", kind, "error", err)
+	return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+}
+
 func (m *Manager) validate(a *models.Assistant) error {
 	a.Name = strings.TrimSpace(a.Name)
 	if a.Name == "" {
@@ -419,7 +527,58 @@ func (m *Manager) validate(a *models.Assistant) error {
 		a.MaxTurns = 6
 	}
 	a.Languages = normalizeLanguages(a.Languages)
+	for _, id := range a.HelpCenterIDs {
+		if id <= 0 {
+			return envelope.NewError(envelope.InputError, m.i18n.T("ai.assistantHelpCentersInvalid"), nil)
+		}
+	}
+	a.HelpCenterIDs = normalizeHelpCenterIDs(a.HelpCenterIDs)
+	a.InboxIDs = normalizeHelpCenterIDs(a.InboxIDs)
+	if a.Enabled && len(a.HelpCenterIDs) == 0 {
+		return envelope.NewError(envelope.InputError, m.i18n.T("ai.assistantHelpCentersRequired"), nil)
+	}
+	if a.Enabled && len(a.InboxIDs) == 0 {
+		return envelope.NewError(envelope.InputError, m.i18n.T("ai.assistantInboxesRequired"), nil)
+	}
+	if len(a.HelpCenterIDs) > 0 {
+		var exists bool
+		if err := m.q.HelpCentersExist.Get(&exists, a.HelpCenterIDs); err != nil {
+			m.lo.Error("error validating assistant help centers", "error", err)
+			return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+		}
+		if !exists {
+			return envelope.NewError(envelope.InputError, m.i18n.T("ai.assistantHelpCentersInvalid"), nil)
+		}
+	}
+	for _, id := range a.InboxIDs {
+		if id <= 0 {
+			return envelope.NewError(envelope.InputError, m.i18n.T("ai.assistantInboxesInvalid"), nil)
+		}
+	}
+	if len(a.InboxIDs) > 0 {
+		var exists bool
+		if err := m.q.InboxesExist.Get(&exists, a.InboxIDs); err != nil {
+			m.lo.Error("error validating assistant inboxes", "error", err)
+			return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
+		}
+		if !exists {
+			return envelope.NewError(envelope.InputError, m.i18n.T("ai.assistantInboxesInvalid"), nil)
+		}
+	}
 	return nil
+}
+
+func normalizeHelpCenterIDs(ids []int64) []int64 {
+	out := make([]int64, 0, len(ids))
+	seen := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // normalizeLanguages trims, drops empties, and dedupes case-insensitively while keeping order.

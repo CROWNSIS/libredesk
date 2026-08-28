@@ -40,9 +40,10 @@ WITH RECURSIVE published_collections AS (
     SELECT c.id FROM article_collections c JOIN published_collections p ON c.parent_id = p.id
     WHERE c.is_published = true
 )
-SELECT a.id, a.title, a.content, a.status, a.ai_enabled, a.embedded_fingerprint,
+SELECT a.id, c.help_center_id, a.title, a.content, a.status, a.ai_enabled, a.embedded_fingerprint,
     a.collection_id IN (SELECT id FROM published_collections) AS is_reachable
 FROM help_articles a
+JOIN article_collections c ON c.id = a.collection_id
 WHERE (a.status = 'published' AND a.ai_enabled) OR a.embedded_fingerprint <> '';
 
 -- name: get-embeddable-help-article
@@ -54,13 +55,21 @@ WITH RECURSIVE published_collections AS (
     SELECT c.id FROM article_collections c JOIN published_collections p ON c.parent_id = p.id
     WHERE c.is_published = true
 )
-SELECT a.id, a.title, a.content, a.status, a.ai_enabled, a.embedded_fingerprint,
+SELECT a.id, c.help_center_id, a.title, a.content, a.status, a.ai_enabled, a.embedded_fingerprint,
     a.collection_id IN (SELECT id FROM published_collections) AS is_reachable
 FROM help_articles a
+JOIN article_collections c ON c.id = a.collection_id
 WHERE a.id = $1;
 
 -- name: help-article-exists
 SELECT EXISTS(SELECT 1 FROM help_articles WHERE id = $1);
+
+-- name: get-help-article-source
+SELECT a.title, hc.slug AS help_center_slug, a.locale, a.slug AS article_slug
+FROM help_articles a
+JOIN article_collections c ON c.id = a.collection_id
+JOIN help_centers hc ON hc.id = c.help_center_id
+WHERE a.id = $1;
 
 -- name: set-help-article-embedded-fingerprint
 UPDATE help_articles SET embedded_fingerprint = $2 WHERE id = $1;
@@ -86,7 +95,11 @@ DELETE FROM embeddings WHERE source_type = $1;
 SELECT id, name FROM tags ORDER BY id;
 
 -- name: get-all-embeddings
-SELECT id, source_type, source_id, chunk_text, embedding, dimensions FROM embeddings;
+SELECT e.id, e.source_type, e.source_id, e.chunk_text, e.embedding, e.dimensions,
+    COALESCE(c.help_center_id, 0) AS help_center_id
+FROM embeddings e
+LEFT JOIN help_articles a ON e.source_type = 'help_article' AND a.id = e.source_id
+LEFT JOIN article_collections c ON c.id = a.collection_id;
 
 -- name: get-tools
 SELECT id, created_at, updated_at, name, description, url, method, auth, parameters, enabled, requires_verification FROM ai_tools ORDER BY updated_at DESC;

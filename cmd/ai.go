@@ -384,12 +384,17 @@ func handleAICopilot(r *fastglue.Request) error {
 	}
 
 	persona := ""
+	var helpCenterIDs []int64
 	if req.AssistantID > 0 {
 		assistant, err := app.aiAgent.GetAssistant(req.AssistantID)
 		if err != nil || !assistant.Enabled {
 			return sendErrorEnvelope(r, envelope.NewError(envelope.InputError, app.i18n.T("ai.assistantUnavailable"), nil))
 		}
+		if !app.aiAgent.AllowsInbox(assistant, conv.InboxID) {
+			return sendErrorEnvelope(r, envelope.NewError(envelope.InputError, app.i18n.T("ai.assistantUnavailable"), nil))
+		}
 		persona = aiagent.BuildCopilotPersona(assistant)
+		helpCenterIDs = assistant.HelpCenterIDs
 	}
 
 	saved, err := app.ai.GetCopilotMessages(conv.ID, auser.ID, maxCopilotHistoryMessages)
@@ -403,7 +408,7 @@ func handleAICopilot(r *fastglue.Request) error {
 	history = append(history, aimodels.ChatMessage{Role: aimodels.RoleUser, Content: req.Message})
 
 	convoContext := conversationTranscript(app, req.ConversationUUID)
-	resp, err := app.ai.Copilot(r.RequestCtx, convoContext, history, ai.ToolContext{}, copilotTools(app, user, conv), persona)
+	resp, err := app.ai.Copilot(r.RequestCtx, convoContext, history, ai.ToolContext{HelpCenterIDs: helpCenterIDs}, copilotTools(app, user, conv), persona)
 	if err != nil {
 		return sendErrorEnvelope(r, err)
 	}

@@ -18,6 +18,11 @@ type compactAssistant struct {
 	Name string `json:"name"`
 }
 
+type compactHelpCenter struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 // handleGetAIAssistants returns all AI assistants.
 func handleGetAIAssistants(r *fastglue.Request) error {
 	app := r.Context.(*App)
@@ -41,6 +46,20 @@ func handleGetAIAssistantsCompact(r *fastglue.Request) error {
 		if a.Enabled {
 			out = append(out, compactAssistant{ID: a.ID, Name: a.Name})
 		}
+	}
+	return r.SendEnvelope(out)
+}
+
+// handleGetAIHelpCentersCompact returns the fields needed by the assistant scope picker.
+func handleGetAIHelpCentersCompact(r *fastglue.Request) error {
+	app := r.Context.(*App)
+	helpCenters, err := app.helpcenter.GetAllHelpCenters()
+	if err != nil {
+		return sendErrorEnvelope(r, err)
+	}
+	out := make([]compactHelpCenter, 0, len(helpCenters))
+	for _, helpCenter := range helpCenters {
+		out = append(out, compactHelpCenter{ID: helpCenter.ID, Name: helpCenter.Name})
 	}
 	return r.SendEnvelope(out)
 }

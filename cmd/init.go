@@ -1020,6 +1020,7 @@ func initAI(ctx context.Context, db *sqlx.DB, i18n *i18n.I18n, dialControl ssrf.
 		Lo:            lo,
 		I18n:          i18n,
 		EncryptionKey: ko.MustString("app.encryption_key"),
+		BaseURL:       ko.String("app.root_url"),
 		DialControl:   dialControl,
 	})
 	if err != nil {

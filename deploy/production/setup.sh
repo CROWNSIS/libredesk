@@ -19,8 +19,11 @@ install -d -m 0700 "${deployment_dir}/backups"
 install -m 0640 "${script_dir}/compose.yaml" "${deployment_dir}/compose.yaml"
 install -m 0644 "${script_dir}/config.production.toml" "${deployment_dir}/config.toml"
 install -m 0644 "${script_dir}/nginx.conf" "${deployment_dir}/nginx.conf"
+install -d -m 0755 "${deployment_dir}/static"
+install -m 0644 "${script_dir}/static/sisol-placeholder.svg" "${deployment_dir}/static/sisol-placeholder.svg"
 install -m 0750 "${script_dir}/backup.sh" "${deployment_dir}/backup.sh"
 install -m 0750 "${script_dir}/deploy-image.sh" "${deployment_dir}/deploy-image.sh"
+install -m 0750 "${script_dir}/init-ollama.sh" "${deployment_dir}/init-ollama.sh"
 
 if [[ ! -f "${deployment_dir}/.env" ]]; then
   umask 077
@@ -33,6 +36,8 @@ if [[ ! -f "${deployment_dir}/.env" ]]; then
     echo "LIBREDESK_SYSTEM_USER_PASSWORD=Ld-$(openssl rand -hex 22)-9A!"
     echo "LIBREDESK_PORT=9000"
     echo "LIBREDESK_TAILSCALE_IP=100.105.41.61"
+    echo "OLLAMA_COMPLETION_MODEL=qwen3:4b-instruct"
+    echo "OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b"
   } > "${deployment_dir}/.env"
 fi
 chmod 0600 "${deployment_dir}/.env"

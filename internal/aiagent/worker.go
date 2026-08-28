@@ -39,6 +39,8 @@ const (
 	// combined. The per-call 60s clock (ai.overallRequestTimeout) nests inside it.
 	emailRunTimeout    = 3 * time.Minute
 	livechatRunTimeout = 90 * time.Second
+
+	ungroundedReply = "I can only answer questions covered by this application's help center, and I don't have a matching article for that request. You can try another product question or reply **human** to contact support."
 )
 
 // nonActionableCategories are status categories the assistant skips; it replies only to open
@@ -214,6 +216,11 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	if !assistant.Enabled {
 		return
 	}
+	if !m.AllowsInbox(assistant, conv.InboxID) {
+		m.lo.Warn("blocked AI assistant on an unauthorized inbox", "conversation_id", conv.ID, "assistant_id", assistant.ID, "inbox_id", conv.InboxID)
+		m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffInboxScope"))
+		return
+	}
 	if nonActionableCategories[conv.StatusCategory.String] {
 		return
 	}
@@ -260,6 +267,29 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 		return
 	}
 
+	// Enforce grounding before the completion model is called. The model never gets an
+	// opportunity to answer general-knowledge or cross-product questions without an eligible
+	// article. Short conversation-control turns (greetings, thanks, requesting a human) remain
+	// available so the support flow is not trapped behind retrieval.
+	gateQuery := groundingQuery(msgs, conv.ContactID)
+	if !isConversationControlMessage(m.messageText(*inbound)) {
+		gateCtx, gateCancel := context.WithTimeout(ctx, 30*time.Second)
+		matches, gateErr := m.ai.SearchHelpCenters(gateCtx, gateQuery, searchResultLimit, assistant.HelpCenterIDs)
+		gateCancel()
+		if gateErr != nil {
+			m.lo.Error("error enforcing AI knowledge scope", "conversation_uuid", conv.UUID, "error", gateErr)
+			m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffError"))
+			return
+		}
+		if len(matches) == 0 || matches[0].Score < minConfidence {
+			m.lo.Info("AI request refused by grounding gate", "conversation_uuid", conv.UUID, "top_score", topSearchScore(matches))
+			if err := m.postReply(conv, assistant, ungroundedReply, map[string]any{"ai_grounding_refusal": true}); err != nil {
+				m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffError"))
+			}
+			return
+		}
+	}
+
 	contactLines := contactFieldLines(conv.Contact)
 	systemPrompt := buildSystemPrompt(assistant)
 	if len(contactLines) == 0 {
@@ -288,7 +318,7 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 
 	outcome := &runOutcome{}
 	tools := []ai.Tool{
-		&searchKnowledgeTool{m: m},
+		&searchKnowledgeTool{m: m, helpCenterIDs: assistant.HelpCenterIDs},
 		&resolveTool{m: m, conv: conv, outcome: outcome},
 	}
 	if assistant.HandoffEnabled {
@@ -323,6 +353,7 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 		ContactType:       conv.Contact.Type,
 		ConversationUUID:  conv.UUID,
 		InboxID:           conv.InboxID,
+		HelpCenterIDs:     assistant.HelpCenterIDs,
 		ContactEmail:      func() string { return conv.Contact.Email.String },
 		Verified:          verified,
 	}
@@ -431,6 +462,49 @@ func (m *Manager) postReply(conv cmodels.Conversation, assistant models.Assistan
 	return nil
 }
 
+func topSearchScore(results []aimodels.SearchResult) float64 {
+	if len(results) == 0 {
+		return 0
+	}
+	return results[0].Score
+}
+
+func groundingQuery(msgs []cmodels.Message, contactID int) string {
+	parts := make([]string, 0, 3)
+	for i := len(msgs) - 1; i >= 0 && len(parts) < 3; i-- {
+		msg := msgs[i]
+		if msg.SenderType != cmodels.SenderTypeContact || msg.SenderID != contactID {
+			continue
+		}
+		text := strings.TrimSpace(msg.TextContent)
+		if text == "" {
+			continue
+		}
+		parts = append(parts, text)
+	}
+	slices.Reverse(parts)
+	query := strings.Join(parts, "\n")
+	if len(query) > 2000 {
+		query = query[len(query)-2000:]
+	}
+	return query
+}
+
+func isConversationControlMessage(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	normalized = strings.Trim(normalized, " .,!?:;\"'()")
+	if normalized == "" {
+		return true
+	}
+	allowed := map[string]bool{
+		"hi": true, "hello": true, "hey": true, "good morning": true, "good afternoon": true,
+		"good evening": true, "thanks": true, "thank you": true, "yes": true, "no": true,
+		"ok": true, "okay": true, "got it": true, "human": true, "agent": true,
+		"support": true, "support ticket": true, "talk to a person": true, "talk to support": true,
+	}
+	return allowed[normalized]
+}
+
 // handoff notes the reason and moves the conversation to the fallback team, or unassigns if none is set.
 func (m *Manager) handoff(conv cmodels.Conversation, assistant models.Assistant, reason string) {
 	actor := m.actorUser(assistant)
@@ -481,7 +555,7 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 	}
 	history := []aimodels.ChatMessage{{Role: aimodels.RoleUser, Content: message}}
 	var hits []aimodels.SearchResult
-	tools := []ai.Tool{&searchKnowledgeTool{m: m, collect: func(rs []aimodels.SearchResult) { hits = append(hits, rs...) }}}
+	tools := []ai.Tool{&searchKnowledgeTool{m: m, helpCenterIDs: a.HelpCenterIDs, collect: func(rs []aimodels.SearchResult) { hits = append(hits, rs...) }}}
 	runCtx, cancel := context.WithTimeout(ctx, livechatRunTimeout)
 	defer cancel()
 	// Preview is search-only: no custom tools (empty allowed set), no built-in, no side effects.
@@ -516,7 +590,7 @@ func (m *Manager) previewSources(hits []aimodels.SearchResult) []models.PreviewS
 			continue
 		}
 		best[key] = len(sources)
-		sources = append(sources, models.PreviewSource{ID: h.SourceID, Type: h.SourceType, Title: title, Score: h.Score})
+		sources = append(sources, models.PreviewSource{ID: h.SourceID, Type: h.SourceType, Title: title, Score: h.Score, URL: h.SourceURL})
 	}
 	return sources
 }

@@ -275,6 +275,7 @@ func initHandlers(g *fastglue.Fastglue, hub *ws.Hub) {
 
 	// Autonomous AI agents (assistants).
 	g.GET("/api/v1/ai/assistants/compact", auth(handleGetAIAssistantsCompact))
+	g.GET("/api/v1/ai/help-centers/compact", perm(handleGetAIHelpCentersCompact, "ai:manage"))
 	g.GET("/api/v1/ai/assistants", perm(handleGetAIAssistants, "ai:manage"))
 	g.GET("/api/v1/ai/assistants/{id}", perm(handleGetAIAssistant, "ai:manage"))
 	g.POST("/api/v1/ai/assistants", perm(handleCreateAIAssistant, "ai:manage"))

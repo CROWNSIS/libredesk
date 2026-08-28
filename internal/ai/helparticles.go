@@ -84,10 +84,11 @@ func (m *Manager) RemoveHelpArticleEmbeddings(id int) error {
 
 func helpArticleItem(row models.HelpArticleItem) embedItem {
 	return embedItem{
-		ID:          row.ID,
-		Title:       row.Title,
-		Content:     row.Content,
-		Fingerprint: row.EmbeddedFingerprint,
+		ID:           row.ID,
+		HelpCenterID: row.HelpCenterID,
+		Title:        row.Title,
+		Content:      row.Content,
+		Fingerprint:  row.EmbeddedFingerprint,
 		// An article inside an unpublished collection is 404 on the public site, so the
 		// assistant must not cite it.
 		Eligible: row.Status == "published" && row.AIEnabled && row.IsReachable,

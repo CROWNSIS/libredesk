@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"slices"
 	"sort"
@@ -24,11 +25,12 @@ const maxConcurrentEmbeds = 4
 
 // indexedChunk is one embedded chunk held in memory for brute-force search.
 type indexedChunk struct {
-	sourceType string
-	sourceID   int
-	chunkText  string
-	vec        []float32
-	norm       float32
+	sourceType   string
+	sourceID     int
+	helpCenterID int
+	chunkText    string
+	vec          []float32
+	norm         float32
 }
 
 // embeddingIndex is an in-memory brute-force vector store.
@@ -45,6 +47,16 @@ func (ix *embeddingIndex) replaceAll(chunks []indexedChunk) {
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
 	ix.chunks = chunks
+}
+
+func (ix *embeddingIndex) setSourceHelpCenterID(sourceType string, sourceID, helpCenterID int) {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	for i := range ix.chunks {
+		if ix.chunks[i].sourceType == sourceType && ix.chunks[i].sourceID == sourceID {
+			ix.chunks[i].helpCenterID = helpCenterID
+		}
+	}
 }
 
 // replaceWhere drops every chunk matching drop, then appends chunks.
@@ -93,6 +105,17 @@ func (ix *embeddingIndex) chunksBySourceID(sourceType string) map[int]indexedChu
 
 // search returns the top-k matches within the given source types and the count of chunks skipped for mismatched vector dimensions.
 func (ix *embeddingIndex) search(query []float32, k int, sourceTypes ...string) ([]models.SearchResult, int) {
+	return ix.searchWhere(query, k, nil, sourceTypes...)
+}
+
+func (ix *embeddingIndex) searchHelpCenters(query []float32, k int, helpCenterIDs map[int]bool) ([]models.SearchResult, int) {
+	return ix.searchWhere(query, k, func(c indexedChunk) bool {
+		return helpCenterIDs[c.helpCenterID]
+	}, models.SourceHelpArticle)
+}
+
+// searchWhere applies allow before scoring and top-k selection, so excluded chunks cannot crowd out eligible results.
+func (ix *embeddingIndex) searchWhere(query []float32, k int, allow func(indexedChunk) bool, sourceTypes ...string) ([]models.SearchResult, int) {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 
@@ -105,6 +128,9 @@ func (ix *embeddingIndex) search(query []float32, k int, sourceTypes ...string) 
 	results := make([]models.SearchResult, 0, len(ix.chunks))
 	for _, c := range ix.chunks {
 		if !slices.Contains(sourceTypes, c.sourceType) {
+			continue
+		}
+		if allow != nil && !allow(c) {
 			continue
 		}
 		if len(c.vec) != len(query) {
@@ -135,7 +161,49 @@ func (m *Manager) Search(ctx context.Context, query string, k int) ([]models.Sea
 	return m.searchSources(ctx, query, k, models.SourceSnippet, models.SourceHelpArticle)
 }
 
+// SearchHelpCenters searches only help articles belonging to the selected help centers.
+// An empty selection fails closed: autonomous assistants must never inherit the global library.
+func (m *Manager) SearchHelpCenters(ctx context.Context, query string, k int, helpCenterIDs []int64) ([]models.SearchResult, error) {
+	if len(helpCenterIDs) == 0 {
+		return []models.SearchResult{}, nil
+	}
+	allowed := make(map[int]bool, len(helpCenterIDs))
+	for _, id := range helpCenterIDs {
+		allowed[int(id)] = true
+	}
+	return m.searchHelpCenters(ctx, query, k, allowed)
+}
+
 func (m *Manager) searchSources(ctx context.Context, query string, k int, sourceTypes ...string) ([]models.SearchResult, error) {
+	return m.searchSourcesWhere(ctx, query, k, nil, sourceTypes...)
+}
+
+func (m *Manager) searchSourcesWhere(ctx context.Context, query string, k int, allow func(indexedChunk) bool, sourceTypes ...string) ([]models.SearchResult, error) {
+	return m.searchWithIndex(ctx, query, sourceTypes, func(qvec []float32) ([]models.SearchResult, int) {
+		return m.index.searchWhere(qvec, k, allow, sourceTypes...)
+	})
+}
+
+func (m *Manager) searchHelpCenters(ctx context.Context, query string, k int, helpCenterIDs map[int]bool) ([]models.SearchResult, error) {
+	results, err := m.searchWithIndex(ctx, query, []string{models.SourceHelpArticle}, func(qvec []float32) ([]models.SearchResult, int) {
+		return m.index.searchHelpCenters(qvec, k, helpCenterIDs)
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range results {
+		var source models.HelpArticleSource
+		if err := m.q.GetHelpArticleSource.Get(&source, results[i].SourceID); err != nil {
+			m.lo.Warn("could not load help article citation", "source_id", results[i].SourceID, "error", err)
+			continue
+		}
+		results[i].SourceTitle = source.Title
+		results[i].SourceURL = fmt.Sprintf("%s/hc/%s/%s/articles/%s", m.baseURL, source.HelpCenterSlug, source.Locale, source.ArticleSlug)
+	}
+	return results, nil
+}
+
+func (m *Manager) searchWithIndex(ctx context.Context, query string, sourceTypes []string, search func([]float32) ([]models.SearchResult, int)) ([]models.SearchResult, error) {
 	// A run arriving right after boot must not search the index before it has loaded.
 	select {
 	case <-m.indexReady:
@@ -146,7 +214,7 @@ func (m *Manager) searchSources(ctx context.Context, query string, k int, source
 	if err != nil {
 		return nil, err
 	}
-	results, dimMismatch := m.index.search(qvec, k, sourceTypes...)
+	results, dimMismatch := search(qvec)
 	if dimMismatch > 0 {
 		m.lo.Warn("skipped stale embeddings with mismatched dimensions; reindex after changing the embedding model", "source_types", sourceTypes, "count", dimMismatch, "query_dimensions", len(qvec))
 	}
@@ -159,7 +227,7 @@ func (m *Manager) searchSources(ctx context.Context, query string, k int, source
 
 // Reindex re-chunks and re-embeds a source's content, replacing its stored and in-memory vectors.
 func (m *Manager) Reindex(sourceType string, sourceID int, title, htmlContent string) error {
-	indexed, err := m.embedSource(m.ctx, sourceType, sourceID, title, htmlContent)
+	indexed, err := m.embedSource(m.ctx, sourceType, sourceID, 0, title, htmlContent)
 	if err != nil {
 		return err
 	}
@@ -169,7 +237,7 @@ func (m *Manager) Reindex(sourceType string, sourceID int, title, htmlContent st
 }
 
 // embedSource chunks and embeds content without touching stored state, so it can run before taking reindexMu.
-func (m *Manager) embedSource(ctx context.Context, sourceType string, sourceID int, title, htmlContent string) ([]indexedChunk, error) {
+func (m *Manager) embedSource(ctx context.Context, sourceType string, sourceID, helpCenterID int, title, htmlContent string) ([]indexedChunk, error) {
 	rawChunks, err := stringutil.ChunkHTMLContent(title, htmlContent, m.chunkCfg)
 	if err != nil {
 		m.lo.Error("error chunking content for embedding", "error", err, "source_type", sourceType, "source_id", sourceID)
@@ -191,11 +259,12 @@ func (m *Manager) embedSource(ctx context.Context, sourceType string, sourceID i
 	indexed := make([]indexedChunk, 0, len(chunks))
 	for i, chunk := range chunks {
 		indexed = append(indexed, indexedChunk{
-			sourceType: sourceType,
-			sourceID:   sourceID,
-			chunkText:  chunk,
-			vec:        vecs[i],
-			norm:       norm(vecs[i]),
+			sourceType:   sourceType,
+			sourceID:     sourceID,
+			helpCenterID: helpCenterID,
+			chunkText:    chunk,
+			vec:          vecs[i],
+			norm:         norm(vecs[i]),
 		})
 	}
 	return indexed, nil
@@ -268,11 +337,12 @@ func (m *Manager) loadIndex() error {
 		vectorBytes += len(vec) * 4
 		textBytes += len(r.ChunkText)
 		chunks = append(chunks, indexedChunk{
-			sourceType: r.SourceType,
-			sourceID:   int(r.SourceID),
-			chunkText:  r.ChunkText,
-			vec:        vec,
-			norm:       norm(vec),
+			sourceType:   r.SourceType,
+			sourceID:     int(r.SourceID),
+			helpCenterID: r.HelpCenterID,
+			chunkText:    r.ChunkText,
+			vec:          vec,
+			norm:         norm(vec),
 		})
 	}
 	m.index.replaceAll(chunks)

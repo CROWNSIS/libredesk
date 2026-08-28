@@ -83,7 +83,8 @@ type Tool interface {
 
 // searchArticlesTool is the built-in retrieval tool over embedded articles + snippets.
 type searchArticlesTool struct {
-	m *Manager
+	m             *Manager
+	helpCenterIDs []int64
 }
 
 func (t *searchArticlesTool) Name() string { return toolSearchArticles }
@@ -105,7 +106,7 @@ func (t *searchArticlesTool) Execute(ctx context.Context, args string) (string, 
 		return "No query provided.", nil
 	}
 
-	results, err := t.m.Search(ctx, in.Query, 5)
+	results, err := t.m.SearchHelpCenters(ctx, in.Query, 5, t.helpCenterIDs)
 	if err != nil {
 		return "", err
 	}
@@ -128,6 +129,8 @@ type ToolContext struct {
 	ContactType       string
 	ConversationUUID  string
 	InboxID           int
+	// HelpCenterIDs scopes built-in retrieval. Empty returns no customer-facing knowledge.
+	HelpCenterIDs []int64
 	// ContactEmail is evaluated live per tool call (never snapshotted) so a contact whose email is
 	// set or corrected mid-turn is identified by the current address, not the one at run start.
 	ContactEmail func() string
@@ -294,7 +297,7 @@ func (m *Manager) buildToolRegistry(tctx ToolContext, allowedToolIDs []int, incl
 	}
 
 	if includeBuiltinSearch {
-		register(&searchArticlesTool{m: m})
+		register(&searchArticlesTool{m: m, helpCenterIDs: tctx.HelpCenterIDs})
 	}
 	for _, t := range extra {
 		register(t)

@@ -40,6 +40,8 @@ type Assistant struct {
 	Languages      pq.StringArray `db:"languages" json:"languages"`
 	Enabled        bool           `db:"enabled" json:"enabled"`
 	ToolIDs        []int          `db:"-" json:"tool_ids"`
+	HelpCenterIDs  []int64        `db:"-" json:"help_center_ids"`
+	InboxIDs       []int64        `db:"-" json:"inbox_ids"`
 
 	// RemoveAvatar, when set on a save request, clears the assistant's current avatar.
 	RemoveAvatar bool `db:"-" json:"remove_avatar"`
@@ -51,6 +53,7 @@ type PreviewSource struct {
 	Type  string  `json:"type"`
 	Title string  `json:"title"`
 	Score float64 `json:"score"`
+	URL   string  `json:"url,omitempty"`
 }
 
 // RecentConversation is a summary row of a contact's past conversation, fed to the assistant as context.

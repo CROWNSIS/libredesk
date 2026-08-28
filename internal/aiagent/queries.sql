@@ -38,6 +38,12 @@ UPDATE ai_assistants
 SET description = $2, instructions = $3, guardrails = $4, tone = $5, response_length = $6, max_turns = $7, fallback_team_id = $8, enabled = $9, expectation = $10, handoff_enabled = $11, languages = $12, updated_at = now()
 WHERE id = $1;
 
+-- name: help-centers-exist
+SELECT count(*) = cardinality($1::bigint[]) FROM help_centers WHERE id = ANY($1::bigint[]);
+
+-- name: inboxes-exist
+SELECT count(*) = cardinality($1::bigint[]) FROM inboxes WHERE id = ANY($1::bigint[]) AND deleted_at IS NULL AND enabled = true;
+
 -- name: get-assistant-expectation-by-user-id
 SELECT expectation FROM ai_assistants WHERE user_id = $1;
 
@@ -71,6 +77,34 @@ DELETE FROM ai_assistant_tools WHERE assistant_id = $1;
 INSERT INTO ai_assistant_tools (assistant_id, tool_id)
 VALUES ($1, $2)
 ON CONFLICT (assistant_id, tool_id) DO NOTHING;
+
+-- name: get-assistant-help-centers
+SELECT help_center_id FROM ai_assistant_help_centers WHERE assistant_id = $1 ORDER BY help_center_id;
+
+-- name: get-all-assistant-help-centers
+SELECT assistant_id, help_center_id FROM ai_assistant_help_centers ORDER BY assistant_id, help_center_id;
+
+-- name: delete-assistant-help-centers
+DELETE FROM ai_assistant_help_centers WHERE assistant_id = $1;
+
+-- name: insert-assistant-help-center
+INSERT INTO ai_assistant_help_centers (assistant_id, help_center_id)
+VALUES ($1, $2)
+ON CONFLICT (assistant_id, help_center_id) DO NOTHING;
+
+-- name: get-assistant-inboxes
+SELECT inbox_id FROM ai_assistant_inboxes WHERE assistant_id = $1 ORDER BY inbox_id;
+
+-- name: get-all-assistant-inboxes
+SELECT assistant_id, inbox_id FROM ai_assistant_inboxes ORDER BY assistant_id, inbox_id;
+
+-- name: delete-assistant-inboxes
+DELETE FROM ai_assistant_inboxes WHERE assistant_id = $1;
+
+-- name: insert-assistant-inbox
+INSERT INTO ai_assistant_inboxes (assistant_id, inbox_id)
+VALUES ($1, $2)
+ON CONFLICT (assistant_id, inbox_id) DO NOTHING;
 
 -- name: insert-ai-agent-event
 INSERT INTO ai_agent_events (assistant_id, conversation_id, type) VALUES ($1, $2, $3);

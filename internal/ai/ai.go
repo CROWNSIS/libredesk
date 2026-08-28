@@ -57,6 +57,7 @@ type Manager struct {
 	lo            *logf.Logger
 	i18n          *i18n.I18n
 	encryptionKey string
+	baseURL       string
 	chunkCfg      stringutil.ChunkConfig
 	index         *embeddingIndex
 	// indexReady is closed once the boot-time index load finishes; Search blocks on it.
@@ -84,6 +85,7 @@ type Opts struct {
 	I18n          *i18n.I18n
 	Lo            *logf.Logger
 	EncryptionKey string
+	BaseURL       string
 	DialControl   ssrf.Control
 }
 
@@ -107,6 +109,7 @@ type queries struct {
 	SetKnowledgeBaseFingerprint  *sqlx.Stmt `query:"set-knowledge-base-embedded-fingerprint"`
 	GetEmbeddableHelpArticles    *sqlx.Stmt `query:"get-embeddable-help-articles"`
 	GetEmbeddableHelpArticle     *sqlx.Stmt `query:"get-embeddable-help-article"`
+	GetHelpArticleSource         *sqlx.Stmt `query:"get-help-article-source"`
 	HelpArticleExists            *sqlx.Stmt `query:"help-article-exists"`
 	SetHelpArticleFingerprint    *sqlx.Stmt `query:"set-help-article-embedded-fingerprint"`
 	DeleteOrphanArticleVectors   *sqlx.Stmt `query:"delete-orphan-help-article-embeddings"`
@@ -142,6 +145,7 @@ func New(opts Opts) (*Manager, error) {
 		lo:            opts.Lo,
 		i18n:          opts.I18n,
 		encryptionKey: opts.EncryptionKey,
+		baseURL:       strings.TrimRight(opts.BaseURL, "/"),
 		chunkCfg:      stringutil.DefaultChunkConfig(),
 		index:         newEmbeddingIndex(),
 		indexReady:    make(chan struct{}),

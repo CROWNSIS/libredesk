@@ -800,6 +800,28 @@ CREATE TABLE ai_assistants (
 );
 CREATE INDEX index_ai_assistants_on_user_id ON ai_assistants(user_id);
 
+DROP TABLE IF EXISTS ai_assistant_help_centers CASCADE;
+CREATE TABLE ai_assistant_help_centers (
+	id SERIAL PRIMARY KEY,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	assistant_id INTEGER NOT NULL REFERENCES ai_assistants(id) ON DELETE CASCADE,
+	help_center_id INTEGER NOT NULL REFERENCES help_centers(id) ON DELETE CASCADE,
+	CONSTRAINT unique_ai_assistant_help_center UNIQUE (assistant_id, help_center_id)
+);
+CREATE INDEX index_ai_assistant_help_centers_on_assistant_id ON ai_assistant_help_centers(assistant_id);
+CREATE INDEX index_ai_assistant_help_centers_on_help_center_id ON ai_assistant_help_centers(help_center_id);
+
+DROP TABLE IF EXISTS ai_assistant_inboxes CASCADE;
+CREATE TABLE ai_assistant_inboxes (
+	id SERIAL PRIMARY KEY,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	assistant_id INTEGER NOT NULL REFERENCES ai_assistants(id) ON DELETE CASCADE,
+	inbox_id INTEGER NOT NULL REFERENCES inboxes(id) ON DELETE CASCADE,
+	CONSTRAINT unique_ai_assistant_inbox UNIQUE (assistant_id, inbox_id)
+);
+CREATE INDEX index_ai_assistant_inboxes_on_assistant_id ON ai_assistant_inboxes(assistant_id);
+CREATE INDEX index_ai_assistant_inboxes_on_inbox_id ON ai_assistant_inboxes(inbox_id);
+
 DROP TABLE IF EXISTS ai_assistant_tools CASCADE;
 CREATE TABLE ai_assistant_tools (
 	id SERIAL PRIMARY KEY,

@@ -69,7 +69,8 @@ type runOutcome struct {
 }
 
 type searchKnowledgeTool struct {
-	m *Manager
+	m             *Manager
+	helpCenterIDs []int64
 	// collect, when set, receives the results each search actually used (preview source attribution).
 	collect func([]aimodels.SearchResult)
 }
@@ -92,7 +93,7 @@ func (t *searchKnowledgeTool) Execute(ctx context.Context, args string) (string,
 	if strings.TrimSpace(in.Query) == "" {
 		return "No query provided.", nil
 	}
-	results, err := t.m.ai.Search(ctx, in.Query, searchResultLimit)
+	results, err := t.m.ai.SearchHelpCenters(ctx, in.Query, searchResultLimit, t.helpCenterIDs)
 	if err != nil {
 		return "", err
 	}
@@ -114,7 +115,7 @@ func (t *searchKnowledgeTool) Execute(ctx context.Context, args string) (string,
 		if t.collect != nil {
 			used = append(used, r)
 		}
-		fmt.Fprintf(&b, "<<result %d>>\n%s\n<<end result %d>>\n\n", i+1, neutralizeMarkers(r.ChunkText), i+1)
+		fmt.Fprintf(&b, "<<result %d>>\nSource: %s\nURL: %s\n%s\n<<end result %d>>\n\n", i+1, neutralizeMarkers(r.SourceTitle), r.SourceURL, neutralizeMarkers(r.ChunkText), i+1)
 	}
 	if t.collect != nil {
 		t.collect(used)

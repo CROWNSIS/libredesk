@@ -46,6 +46,45 @@ func TestIndexSearchFiltersBySourceType(t *testing.T) {
 	}
 }
 
+func TestIndexSearchFiltersHelpCenterBeforeTopK(t *testing.T) {
+	ix := newEmbeddingIndex()
+	ix.replaceAll([]indexedChunk{
+		{sourceType: models.SourceHelpArticle, sourceID: 1, helpCenterID: 20, chunkText: "other center", vec: []float32{1, 0}, norm: 1},
+		{sourceType: models.SourceSnippet, sourceID: 2, chunkText: "shared snippet", vec: []float32{1, 0}, norm: 1},
+		{sourceType: models.SourceHelpArticle, sourceID: 3, helpCenterID: 10, chunkText: "selected center", vec: []float32{0.8, 0.6}, norm: 1},
+	})
+
+	results, _ := ix.searchHelpCenters([]float32{1, 0}, 1, map[int]bool{10: true})
+	if len(results) != 1 || results[0].ChunkText != "selected center" {
+		t.Fatalf("results = %v, want the selected center despite higher-scoring excluded chunks", results)
+	}
+}
+
+func TestIndexSearchWithEmptyHelpCenterScopeReturnsNothing(t *testing.T) {
+	ix := newEmbeddingIndex()
+	ix.replaceAll([]indexedChunk{
+		{sourceType: models.SourceHelpArticle, sourceID: 1, helpCenterID: 20, chunkText: "other center", vec: []float32{1, 0}, norm: 1},
+	})
+
+	results, _ := ix.searchHelpCenters([]float32{1, 0}, 10, map[int]bool{})
+	if len(results) != 0 {
+		t.Fatalf("results = %v, want fail-closed empty result", results)
+	}
+}
+
+func TestIndexSearchWithoutScopeRemainsGlobal(t *testing.T) {
+	ix := newEmbeddingIndex()
+	ix.replaceAll([]indexedChunk{
+		{sourceType: models.SourceSnippet, sourceID: 1, chunkText: "snippet", vec: []float32{1, 0}, norm: 1},
+		{sourceType: models.SourceHelpArticle, sourceID: 2, helpCenterID: 10, chunkText: "article", vec: []float32{0.8, 0.6}, norm: 1},
+	})
+
+	results, _ := ix.search([]float32{1, 0}, 2, models.SourceSnippet, models.SourceHelpArticle)
+	if len(results) != 2 || results[0].ChunkText != "snippet" || results[1].ChunkText != "article" {
+		t.Fatalf("results = %v, want snippets and articles in global search", results)
+	}
+}
+
 func TestIndexReplaceSourceIDs(t *testing.T) {
 	ix := newEmbeddingIndex()
 	ix.replaceAll([]indexedChunk{

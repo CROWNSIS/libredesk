@@ -63,7 +63,7 @@ queue_size = 2000
 worker_count = 10
 
 [ai_agent]
-worker_count = 10
+worker_count = 1
 queue_size = 1000
 max_steps = 6
 max_history_messages = 30
