@@ -314,7 +314,7 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	// completion models can negate or otherwise distort an article while paraphrasing it; the
 	// extractive path is both faster and keeps the help-centre text as the exact answer authority.
 	if len(gateMatches) > 0 && len(assistant.ToolIDs) == 0 {
-		answer := groundedReplyWithSource(focusedGroundedPassage(gateMatches[0], gateQuery), gateMatches[0].SourceURL)
+		answer := groundedReplyWithSource(extractiveGroundedPassage(gateMatches[0]), gateMatches[0].SourceURL)
 		if answer == "" {
 			answer = ungroundedReply
 		}
@@ -614,7 +614,7 @@ func contextualGroundingQuery(message string, ctx threadGroundingContext) string
 	if ctx.PreviousTopic != "" {
 		parts = append(parts, "Previous topic: "+ctx.PreviousTopic)
 	}
-	parts = append(parts, "Follow-up: "+strings.TrimSpace(message))
+	parts = append([]string{"Follow-up question: " + strings.TrimSpace(message)}, parts...)
 	return groundingQuery(strings.Join(parts, "\n"))
 }
 
@@ -727,7 +727,7 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 			return ungroundedReply, nil, nil
 		}
 		if len(a.ToolIDs) == 0 {
-			answer := groundedReplyWithSource(focusedGroundedPassage(hits[0], message), hits[0].SourceURL)
+			answer := groundedReplyWithSource(extractiveGroundedPassage(hits[0]), hits[0].SourceURL)
 			if answer == "" {
 				return ungroundedReply, nil, nil
 			}
@@ -800,117 +800,6 @@ func extractiveGroundedPassage(match aimodels.SearchResult) string {
 		return "**" + section + "**\n\n" + passage
 	}
 	return passage
-}
-
-// focusedGroundedPassage keeps extractive answers concise by selecting the paragraph that best
-// matches the current question and the immediately following instructions. It never generates or
-// paraphrases facts that are absent from the retrieved help article.
-func focusedGroundedPassage(match aimodels.SearchResult, query string) string {
-	passage := extractiveGroundedPassage(match)
-	if passage == "" {
-		return ""
-	}
-	section := ""
-	if strings.HasPrefix(passage, "**") {
-		if end := strings.Index(passage[2:], "**\n\n"); end >= 0 {
-			end += 2
-			section = passage[:end+2]
-			passage = strings.TrimSpace(passage[end+4:])
-		}
-	}
-	paragraphs := splitGroundedParagraphs(passage)
-	if len(paragraphs) <= 1 {
-		return extractiveGroundedPassage(match)
-	}
-	queryTokens := groundingTokens(query)
-	bestIndex, bestScore := 0, 0
-	for i, paragraph := range paragraphs {
-		paragraphTokens := groundingTokens(paragraph)
-		score := focusedParagraphScore(queryTokens, paragraphTokens)
-		if score > bestScore {
-			bestIndex, bestScore = i, score
-		}
-	}
-	if bestScore == 0 {
-		return extractiveGroundedPassage(match)
-	}
-	end := min(len(paragraphs), bestIndex+6)
-	answer := strings.Join(paragraphs[bestIndex:end], "\n\n")
-	if len(answer) > 1800 {
-		answer = strings.TrimSpace(answer[:1800])
-	}
-	if section != "" {
-		answer = section + "\n\n" + answer
-	}
-	return answer
-}
-
-func splitGroundedParagraphs(passage string) []string {
-	raw := strings.Split(strings.ReplaceAll(passage, "\r\n", "\n"), "\n\n")
-	paragraphs := make([]string, 0, len(raw))
-	for _, paragraph := range raw {
-		paragraph = strings.TrimSpace(paragraph)
-		if paragraph != "" {
-			paragraphs = append(paragraphs, paragraph)
-		}
-	}
-	return paragraphs
-}
-
-func groundingTokens(text string) map[string]bool {
-	stopWords := map[string]bool{
-		"a": true, "an": true, "and": true, "are": true, "be": true, "can": true, "do": true,
-		"does": true, "for": true, "how": true, "i": true, "if": true, "in": true, "is": true,
-		"it": true, "of": true, "on": true, "or": true, "the": true, "this": true, "to": true,
-		"what": true, "when": true, "with": true, "you": true, "your": true,
-	}
-	tokens := map[string]bool{}
-	for _, token := range strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'))
-	}) {
-		switch token {
-		case "see", "view", "visible", "visibility", "show", "shown", "display", "displayed":
-			token = "visibility"
-		case "everyone", "everybody", "all", "profiles", "users", "systemwide", "every":
-			token = "all"
-		case "add", "adding", "create", "creating", "setup", "set", "configure":
-			token = "setup"
-		}
-		if len(token) > 4 && strings.HasSuffix(token, "s") {
-			token = strings.TrimSuffix(token, "s")
-		}
-		if token != "" && !stopWords[token] {
-			tokens[token] = true
-		}
-	}
-	return tokens
-}
-
-func tokenOverlapScore(query, paragraph map[string]bool) int {
-	score := 0
-	for token := range query {
-		if paragraph[token] {
-			score++
-		}
-	}
-	return score
-}
-
-func focusedParagraphScore(query, paragraph map[string]bool) int {
-	// Matching a query term is deliberately much more valuable than brevity. Navigation/action
-	// language favors the start of an instruction sequence over a later field label, while the
-	// event penalty distinguishes a specific holiday question from a generic Event/Holiday intro.
-	score := tokenOverlapScore(query, paragraph)*100 - len(paragraph)
-	for _, action := range []string{"click", "menu", "navigate", "open", "select", "tab", "turn"} {
-		if paragraph[action] {
-			score += 10
-			break
-		}
-	}
-	if query["holiday"] && !query["event"] && paragraph["event"] {
-		score -= 50
-	}
-	return score
 }
 
 func knowledgeContextBlock(matches []aimodels.SearchResult) string {

@@ -105,6 +105,26 @@ func TestChunkHTMLContent_Basic(t *testing.T) {
 	}
 }
 
+func TestDefaultChunkConfigKeepsLongArticlesRetrievableBySubtopic(t *testing.T) {
+	cfg := DefaultChunkConfig()
+	cfg.TokenizerFunc = simpleTokenizer
+
+	intro := strings.Repeat("Configure the default calendar title dates weekdays and visibility. ", 28)
+	holiday := strings.Repeat("Holiday setup uses the Holiday tab and Apply to All Schools option. ", 8)
+	chunks, err := ChunkHTMLContent("School calendars", "<p>"+intro+"</p><p>"+holiday+"</p>", cfg)
+	require.NoError(t, err)
+	require.Greater(t, len(chunks), 1, "long articles need multiple semantic retrieval units")
+
+	var holidayChunk string
+	for _, chunk := range chunks {
+		assert.LessOrEqual(t, cfg.TokenizerFunc(chunk), cfg.MaxTokens+20, "metadata may add a small title allowance")
+		if strings.Contains(chunk, "Apply to All Schools") {
+			holidayChunk = chunk
+		}
+	}
+	require.NotEmpty(t, holidayChunk, "the later subtopic must remain independently retrievable")
+}
+
 func TestChunkConfig_Validation(t *testing.T) {
 	testCases := []struct {
 		name          string

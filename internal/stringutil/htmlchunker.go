@@ -11,7 +11,7 @@ import (
 )
 
 // Bump whenever ChunkHTMLContent changes the text it emits for unchanged input; it feeds reindex fingerprints.
-const ChunkerVersion = 4
+const ChunkerVersion = 5
 
 var (
 	sentenceRegex     = regexp.MustCompile(`[.!?]+[\s]+`)
@@ -53,9 +53,9 @@ type htmlBoundary struct {
 // DefaultChunkConfig returns a ChunkConfig with sensible defaults for HTML chunking.
 func DefaultChunkConfig() ChunkConfig {
 	return ChunkConfig{
-		MaxTokens:      700,
-		MinTokens:      200,
-		OverlapTokens:  50,
+		MaxTokens:      220,
+		MinTokens:      60,
+		OverlapTokens:  30,
 		TokenizerFunc:  defaultTokenizer,
 		PreserveBlocks: []string{"pre", "code", "table"},
 	}
