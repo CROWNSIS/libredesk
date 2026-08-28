@@ -161,7 +161,7 @@ func TestContextualGroundingQueryIncludesOnlyActiveTopicAndSource(t *testing.T) 
 }
 
 func TestFocusedGroundedPassageReturnsHolidaySubsection(t *testing.T) {
-	match := aimodels.SearchResult{ChunkText: "Title: Calendar\nContent: Use the default calendar or add a calendar.\n\nSelect Visible To for events.\n\nSimilarly to add a holiday, select the Holiday tab.\n\nAdd the holiday title.\n\nAdd the start and end dates.\n\nTurn on Apply to All Schools if required.\n\nClick Submit to save."}
+	match := aimodels.SearchResult{ChunkText: "Title: Calendar\nContent: Use the default calendar or add a calendar.\n\nTo add an Event / Holiday, click on any date on the calendar and choose an option in the popup.\n\nSelect the Event tab.\n\nAdd the event title.\n\nSimilarly to add a holiday, select the Holiday tab.\n\nAdd the holiday title.\n\nAdd the start and end dates.\n\nTurn on Apply to All Schools if required.\n\nClick Submit to save."}
 	got := focusedGroundedPassage(match, "What about adding a holiday?")
 	if !strings.Contains(got, "select the Holiday tab") || !strings.Contains(got, "Apply to All Schools") {
 		t.Fatalf("focusedGroundedPassage() missed holiday instructions: %s", got)

@@ -825,7 +825,8 @@ func focusedGroundedPassage(match aimodels.SearchResult, query string) string {
 	queryTokens := groundingTokens(query)
 	bestIndex, bestScore := 0, 0
 	for i, paragraph := range paragraphs {
-		score := tokenOverlapScore(queryTokens, groundingTokens(paragraph))
+		paragraphTokens := groundingTokens(paragraph)
+		score := focusedParagraphScore(queryTokens, paragraphTokens)
 		if score > bestScore {
 			bestIndex, bestScore = i, score
 		}
@@ -891,6 +892,23 @@ func tokenOverlapScore(query, paragraph map[string]bool) int {
 		if paragraph[token] {
 			score++
 		}
+	}
+	return score
+}
+
+func focusedParagraphScore(query, paragraph map[string]bool) int {
+	// Matching a query term is deliberately much more valuable than brevity. Navigation/action
+	// language favors the start of an instruction sequence over a later field label, while the
+	// event penalty distinguishes a specific holiday question from a generic Event/Holiday intro.
+	score := tokenOverlapScore(query, paragraph)*100 - len(paragraph)
+	for _, action := range []string{"click", "menu", "navigate", "open", "select", "tab", "turn"} {
+		if paragraph[action] {
+			score += 10
+			break
+		}
+	}
+	if query["holiday"] && !query["event"] && paragraph["event"] {
+		score -= 50
 	}
 	return score
 }
