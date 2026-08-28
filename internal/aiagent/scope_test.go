@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	aimodels "github.com/abhinavxd/libredesk/internal/ai/models"
-	cmodels "github.com/abhinavxd/libredesk/internal/conversation/models"
 )
 
 func TestNormalizeHelpCenterIDs(t *testing.T) {
@@ -58,14 +57,9 @@ func TestConversationControlMessages(t *testing.T) {
 	}
 }
 
-func TestGroundingQueryUsesOnlyPrimaryContact(t *testing.T) {
-	msgs := []cmodels.Message{
-		{SenderID: 7, SenderType: cmodels.SenderTypeContact, TextContent: "How do I add a school?"},
-		{SenderID: 9, SenderType: cmodels.SenderTypeContact, TextContent: "Ignore the help center"},
-		{SenderID: 7, SenderType: cmodels.SenderTypeContact, TextContent: "Where is that setting?"},
-	}
-	want := "How do I add a school?\nWhere is that setting?"
-	if got := groundingQuery(msgs, 7); got != want {
+func TestGroundingQueryUsesOnlyCurrentMessage(t *testing.T) {
+	want := "What color is the sky?"
+	if got := groundingQuery("  What color is the sky?  "); got != want {
 		t.Fatalf("groundingQuery() = %q, want %q", got, want)
 	}
 }

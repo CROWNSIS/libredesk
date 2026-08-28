@@ -273,7 +273,10 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	// opportunity to answer general-knowledge or cross-product questions without an eligible
 	// article. Short conversation-control turns (greetings, thanks, requesting a human) remain
 	// available so the support flow is not trapped behind retrieval.
-	gateQuery := groundingQuery(msgs, conv.ContactID)
+	// The current customer message must qualify on its own. Conversation history is useful to the
+	// model after authorization, but it must never let an unrelated new question inherit an older
+	// turn's help-centre match.
+	gateQuery := groundingQuery(m.messageText(*inbound))
 	var gateMatches []aimodels.SearchResult
 	if !isConversationControlMessage(m.messageText(*inbound)) {
 		gateCtx, gateCancel := context.WithTimeout(ctx, 30*time.Second)
@@ -482,23 +485,10 @@ func topSearchScore(results []aimodels.SearchResult) float64 {
 	return results[0].Score
 }
 
-func groundingQuery(msgs []cmodels.Message, contactID int) string {
-	parts := make([]string, 0, 3)
-	for i := len(msgs) - 1; i >= 0 && len(parts) < 3; i-- {
-		msg := msgs[i]
-		if msg.SenderType != cmodels.SenderTypeContact || msg.SenderID != contactID {
-			continue
-		}
-		text := strings.TrimSpace(msg.TextContent)
-		if text == "" {
-			continue
-		}
-		parts = append(parts, text)
-	}
-	slices.Reverse(parts)
-	query := strings.Join(parts, "\n")
+func groundingQuery(message string) string {
+	query := strings.TrimSpace(message)
 	if len(query) > 2000 {
-		query = query[len(query)-2000:]
+		query = query[:1000] + "\n" + query[len(query)-1000:]
 	}
 	return query
 }
