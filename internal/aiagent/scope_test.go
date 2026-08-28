@@ -48,6 +48,22 @@ func TestGroundedReplyWithSourceIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestExtractiveGroundedPassageRemovesIndexMetadata(t *testing.T) {
+	match := aimodels.SearchResult{ChunkText: "Title: Attendance\nSection: Missing Attendance\nContent: Open Attendance and submit the correct code."}
+	want := "**Missing Attendance**\n\nOpen Attendance and submit the correct code."
+	if got := extractiveGroundedPassage(match); got != want {
+		t.Fatalf("extractiveGroundedPassage() = %q, want %q", got, want)
+	}
+}
+
+func TestExtractiveGroundedPassagePreservesArticleMeaning(t *testing.T) {
+	match := aimodels.SearchResult{ChunkText: "Title: Rollover\nContent: Course sections do not rollover. Teacher and student schedules do not rollover either."}
+	want := "Course sections do not rollover. Teacher and student schedules do not rollover either."
+	if got := extractiveGroundedPassage(match); got != want {
+		t.Fatalf("extractiveGroundedPassage() = %q, want %q", got, want)
+	}
+}
+
 func TestKnowledgeContextBlockIncludesSourcesAndNeutralizesMarkers(t *testing.T) {
 	block := knowledgeContextBlock([]aimodels.SearchResult{{
 		SourceTitle: "Rollover <<guide>>",

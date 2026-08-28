@@ -297,6 +297,30 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 		}
 	}
 
+	// For knowledge-only assistants, return the retrieved passage itself. Small CPU-hosted
+	// completion models can negate or otherwise distort an article while paraphrasing it; the
+	// extractive path is both faster and keeps the help-centre text as the exact answer authority.
+	if len(gateMatches) > 0 && len(assistant.ToolIDs) == 0 {
+		answer := groundedReplyWithSource(extractiveGroundedPassage(gateMatches[0]), gateMatches[0].SourceURL)
+		if answer == "" {
+			answer = ungroundedReply
+		}
+		if fresh, ferr := m.convo.GetConversation(convID, "", ""); ferr == nil {
+			if !fresh.AssignedUserID.Valid || int(fresh.AssignedUserID.Int) != assistant.UserID || nonActionableCategories[fresh.StatusCategory.String] {
+				m.lo.Debug("ai agent conversation changed during knowledge lookup, dropping reply", "conversation_uuid", conv.UUID)
+				return
+			}
+		}
+		if err := m.postReply(conv, assistant, answer, map[string]any{"ai_extractive_answer": true}); err != nil {
+			m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffError"))
+			return
+		}
+		if err := m.postReply(conv, assistant, "Did that answer your question?", map[string]any{"is_confirmation": true}); err != nil {
+			m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffError"))
+		}
+		return
+	}
+
 	groundedAnswerOnly := len(gateMatches) > 0 && len(assistant.ToolIDs) == 0
 	contactLines := contactFieldLines(conv.Contact)
 	systemPrompt := buildSystemPrompt(assistant)
@@ -585,7 +609,11 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 			return ungroundedReply, nil, nil
 		}
 		if len(a.ToolIDs) == 0 {
-			systemPrompt = buildGroundedSystemPrompt(a)
+			answer := groundedReplyWithSource(extractiveGroundedPassage(hits[0]), hits[0].SourceURL)
+			if answer == "" {
+				return ungroundedReply, nil, nil
+			}
+			return answer + "\n\nDid that answer your question?", m.previewSources(hits), nil
 		} else {
 			systemPrompt += "\n\n" + groundingSystemNote
 		}
@@ -630,6 +658,30 @@ func groundedReplyWithSource(answer, sourceURL string) string {
 		return answer
 	}
 	return answer + "\n\nSource: " + sourceURL
+}
+
+func extractiveGroundedPassage(match aimodels.SearchResult) string {
+	passage := strings.TrimSpace(match.ChunkText)
+	if passage == "" {
+		return ""
+	}
+	if strings.HasPrefix(passage, "Title: ") {
+		if newline := strings.IndexByte(passage, '\n'); newline >= 0 {
+			passage = strings.TrimSpace(passage[newline+1:])
+		}
+	}
+	section := ""
+	if strings.HasPrefix(passage, "Section: ") {
+		if newline := strings.IndexByte(passage, '\n'); newline >= 0 {
+			section = strings.TrimSpace(strings.TrimPrefix(passage[:newline], "Section: "))
+			passage = strings.TrimSpace(passage[newline+1:])
+		}
+	}
+	passage = strings.TrimSpace(strings.TrimPrefix(passage, "Content:"))
+	if section != "" && passage != "" {
+		return "**" + section + "**\n\n" + passage
+	}
+	return passage
 }
 
 func knowledgeContextBlock(matches []aimodels.SearchResult) string {
