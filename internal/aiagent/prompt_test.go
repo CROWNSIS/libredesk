@@ -36,7 +36,7 @@ func TestBuildGroundedSystemPromptIsCompactAndScoped(t *testing.T) {
 		Guardrails:     "Never disclose private data.",
 		HandoffEnabled: true,
 	})
-	for _, want := range []string{"SISOL Support", "only from those excerpts", "exact URL", "[[confirm]]", "/no_think", "Use SISOL terminology"} {
+	for _, want := range []string{"SISOL Support", "only from those excerpts", "at most 60 words", "application adds both", "/no_think", "Use SISOL terminology"} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("grounded prompt missing %q: %s", want, prompt)
 		}

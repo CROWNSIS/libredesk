@@ -25,8 +25,16 @@ func TestRelevantGroundingMatchesFiltersAndCaps(t *testing.T) {
 		{SourceID: 5, Score: minConfidence - 0.01},
 	}
 	got := relevantGroundingMatches(matches)
-	if len(got) != 2 || got[0].SourceID != 1 || got[1].SourceID != 2 {
+	if len(got) != 1 || got[0].SourceID != 1 {
 		t.Fatalf("relevantGroundingMatches() = %#v", got)
+	}
+}
+
+func TestGroundedReplyWithSourceIsDeterministic(t *testing.T) {
+	got := groundedReplyWithSource("Follow the documented steps.", "https://support.example/article")
+	want := "Follow the documented steps.\n\nSource: https://support.example/article"
+	if got != want {
+		t.Fatalf("groundedReplyWithSource() = %q, want %q", got, want)
 	}
 }
 

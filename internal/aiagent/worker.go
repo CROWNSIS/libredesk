@@ -414,6 +414,10 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	}
 	// The model's text answer is the reply to the customer. Handoff and resolve are separate tool actions.
 	answer, confirm := splitConfirmation(strings.TrimSpace(answer))
+	if groundedAnswerOnly && answer != "" {
+		answer = groundedReplyWithSource(answer, gateMatches[0].SourceURL)
+		confirm = "Did that answer your question?"
+	}
 	// Email gets one message; separate chat-style bubbles only suit the widget.
 	if conv.InboxChannel == channelEmail && confirm != "" {
 		answer, confirm = answer+"\n\n"+confirm, ""
@@ -595,6 +599,10 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 		return "", nil, err
 	}
 	main, confirm := splitConfirmation(strings.TrimSpace(answer))
+	if len(hits) > 0 && len(a.ToolIDs) == 0 && main != "" {
+		main = groundedReplyWithSource(main, hits[0].SourceURL)
+		confirm = "Did that answer your question?"
+	}
 	if confirm != "" {
 		main += "\n\n" + confirm
 	}
@@ -602,17 +610,26 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 }
 
 func relevantGroundingMatches(matches []aimodels.SearchResult) []aimodels.SearchResult {
-	relevant := make([]aimodels.SearchResult, 0, min(len(matches), 2))
+	relevant := make([]aimodels.SearchResult, 0, min(len(matches), 1))
 	for _, match := range matches {
 		if match.Score < minConfidence {
 			continue
 		}
 		relevant = append(relevant, match)
-		if len(relevant) == 2 {
+		if len(relevant) == 1 {
 			break
 		}
 	}
 	return relevant
+}
+
+func groundedReplyWithSource(answer, sourceURL string) string {
+	answer = strings.TrimSpace(answer)
+	sourceURL = strings.TrimSpace(sourceURL)
+	if answer == "" || sourceURL == "" {
+		return answer
+	}
+	return answer + "\n\nSource: " + sourceURL
 }
 
 func knowledgeContextBlock(matches []aimodels.SearchResult) string {
