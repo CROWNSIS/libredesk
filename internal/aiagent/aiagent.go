@@ -22,6 +22,7 @@ import (
 	"github.com/abhinavxd/libredesk/internal/user"
 	"github.com/jmoiron/sqlx"
 	"github.com/knadh/go-i18n"
+	"github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/logf"
 )
@@ -542,7 +543,7 @@ func (m *Manager) validate(a *models.Assistant) error {
 	}
 	if len(a.HelpCenterIDs) > 0 {
 		var exists bool
-		if err := m.q.HelpCentersExist.Get(&exists, a.HelpCenterIDs); err != nil {
+		if err := m.q.HelpCentersExist.Get(&exists, pq.Array(a.HelpCenterIDs)); err != nil {
 			m.lo.Error("error validating assistant help centers", "error", err)
 			return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
@@ -557,7 +558,7 @@ func (m *Manager) validate(a *models.Assistant) error {
 	}
 	if len(a.InboxIDs) > 0 {
 		var exists bool
-		if err := m.q.InboxesExist.Get(&exists, a.InboxIDs); err != nil {
+		if err := m.q.InboxesExist.Get(&exists, pq.Array(a.InboxIDs)); err != nil {
 			m.lo.Error("error validating assistant inboxes", "error", err)
 			return envelope.NewError(envelope.GeneralError, m.i18n.T("globals.messages.somethingWentWrong"), nil)
 		}
