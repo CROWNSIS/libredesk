@@ -162,7 +162,7 @@ services:
     cap_drop:
       - ALL
     mem_limit: ${OLLAMA_COMPLETION_MEMORY_LIMIT:-3g}
-    cpus: ${OLLAMA_COMPLETION_CPU_LIMIT:-6.0}
+    cpus: ${OLLAMA_COMPLETION_CPU_LIMIT:-8.0}
     stop_grace_period: 30s
     logging: *default-logging
 

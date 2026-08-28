@@ -30,6 +30,16 @@ func TestRelevantGroundingMatchesFiltersAndCaps(t *testing.T) {
 	}
 }
 
+func TestRelevantGroundingMatchesRejectsSemanticNoise(t *testing.T) {
+	matches := []aimodels.SearchResult{
+		{SourceID: 134, SourceTitle: "Home", Score: 0.3382},
+		{SourceID: 135, SourceTitle: "Contact Us", Score: 0.2563},
+	}
+	if got := relevantGroundingMatches(matches); len(got) != 0 {
+		t.Fatalf("relevantGroundingMatches() accepted unrelated help-centre noise: %#v", got)
+	}
+}
+
 func TestGroundedReplyWithSourceIsDeterministic(t *testing.T) {
 	got := groundedReplyWithSource("Follow the documented steps.", "https://support.example/article")
 	want := "Follow the documented steps.\n\nSource: https://support.example/article"

@@ -24,7 +24,10 @@ const (
 
 	// minConfidence is the cosine-similarity floor below which a hit is treated as no match,
 	// so the assistant hands off rather than answering from a weak retrieval.
-	minConfidence = 0.30
+	// qwen3-embedding:0.6b scores an unrelated general-knowledge query against the
+	// generic help-centre home page at about 0.34. Keep the gate above that noise
+	// floor so broad landing-page copy cannot authorize a completion.
+	minConfidence = 0.40
 )
 
 var (
