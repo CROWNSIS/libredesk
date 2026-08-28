@@ -63,6 +63,12 @@ context. Larger contexts consume more RAM and should be load-tested before
 raising `OLLAMA_CONTEXT_LENGTH`. Resource limits and keep-alive are configurable
 through the documented `OLLAMA_*` values in `.env`.
 
+For Qwen3 completion models, set the completion provider's **Reasoning effort**
+to `none` in LibreDesk's AI provider settings. This uses Qwen's non-thinking
+mode for routine grounded support answers; leaving it blank makes the model
+spend most of the response budget on hidden reasoning and can return an empty
+answer when the token cap is reached.
+
 ## Backups
 
 The `libredesk-backup.timer` user timer runs `~/libredesk/backup.sh` nightly.

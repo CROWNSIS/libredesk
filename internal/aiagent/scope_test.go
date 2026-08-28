@@ -25,7 +25,7 @@ func TestRelevantGroundingMatchesFiltersAndCaps(t *testing.T) {
 		{SourceID: 5, Score: minConfidence - 0.01},
 	}
 	got := relevantGroundingMatches(matches)
-	if len(got) != 3 || got[0].SourceID != 1 || got[2].SourceID != 3 {
+	if len(got) != 2 || got[0].SourceID != 1 || got[1].SourceID != 2 {
 		t.Fatalf("relevantGroundingMatches() = %#v", got)
 	}
 }

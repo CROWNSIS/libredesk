@@ -297,12 +297,15 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 		}
 	}
 
+	groundedAnswerOnly := len(gateMatches) > 0 && len(assistant.ToolIDs) == 0
 	contactLines := contactFieldLines(conv.Contact)
 	systemPrompt := buildSystemPrompt(assistant)
-	if len(gateMatches) > 0 {
+	if groundedAnswerOnly {
+		systemPrompt = buildGroundedSystemPrompt(assistant)
+	} else if len(gateMatches) > 0 {
 		systemPrompt += "\n\n" + groundingSystemNote
 	}
-	if len(contactLines) == 0 {
+	if !groundedAnswerOnly && len(contactLines) == 0 {
 		systemPrompt += "\n\n" + noContactIdentityNote
 	}
 	history := m.buildHistory(msgs, conv.ContactID)
@@ -311,8 +314,10 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	}
 	// Keep customer-controlled data (contact fields, subject, attributes) out of the system prompt; it
 	// stays in a user-role block so it ranks below the assistant's instructions, not beside them.
-	if block := customerContextBlock(conv, contactLines); block != "" {
-		history = append([]aimodels.ChatMessage{{Role: aimodels.RoleUser, Content: block}}, history...)
+	if !groundedAnswerOnly {
+		if block := customerContextBlock(conv, contactLines); block != "" {
+			history = append([]aimodels.ChatMessage{{Role: aimodels.RoleUser, Content: block}}, history...)
+		}
 	}
 	m.lo.Debug("ai agent running", "conversation_uuid", conv.UUID, "history_messages", len(history), "turns", turns)
 
@@ -334,15 +339,16 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	// Do not expose the search tool again: a second model-driven search adds a redundant
 	// completion round-trip on CPU-hosted models and can broaden the evidence set after the
 	// server-side scope gate has made its decision.
-	tools := []ai.Tool{
-		&resolveTool{m: m, conv: conv, outcome: outcome},
-	}
-	if assistant.HandoffEnabled {
-		tools = append(tools, &handoffTool{m: m, conv: conv, assistant: assistant, outcome: outcome})
-	}
-	if recent := m.recentContactConversations(conv, runVerified); len(recent) > 0 {
-		systemPrompt += fmt.Sprintf("\n\nThis customer has %d other conversation(s) from the last %d days. Call get_previous_conversations if the current issue might be a follow-up or related to them.", len(recent), recentConversationDays)
-		tools = append(tools, &previousConversationsTool{m: m, conversations: recent})
+	var tools []ai.Tool
+	if !groundedAnswerOnly {
+		tools = append(tools, &resolveTool{m: m, conv: conv, outcome: outcome})
+		if assistant.HandoffEnabled {
+			tools = append(tools, &handoffTool{m: m, conv: conv, assistant: assistant, outcome: outcome})
+		}
+		if recent := m.recentContactConversations(conv, runVerified); len(recent) > 0 {
+			systemPrompt += fmt.Sprintf("\n\nThis customer has %d other conversation(s) from the last %d days. Call get_previous_conversations if the current issue might be a follow-up or related to them.", len(recent), recentConversationDays)
+			tools = append(tools, &previousConversationsTool{m: m, conversations: recent})
+		}
 	}
 
 	// Register the verification tools whenever verification is OTP-based, even if the run starts
@@ -380,7 +386,11 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	stopTyping := m.keepTyping(conv.UUID)
-	answer, err := m.ai.RunAgentWithTools(runCtx, systemPrompt, history, m.maxSteps, tctx, assistant.ToolIDs, false, false, tools)
+	allowedToolIDs := assistant.ToolIDs
+	if groundedAnswerOnly {
+		allowedToolIDs = nil
+	}
+	answer, err := m.ai.RunAgentWithTools(runCtx, systemPrompt, history, m.maxSteps, tctx, allowedToolIDs, false, false, tools)
 	stopTyping()
 	// A human agent may have taken over or resolved the conversation mid-run; if so, drop this
 	// run's reply and status actions instead of talking over them.
@@ -570,7 +580,11 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 		if len(hits) == 0 {
 			return ungroundedReply, nil, nil
 		}
-		systemPrompt += "\n\n" + groundingSystemNote
+		if len(a.ToolIDs) == 0 {
+			systemPrompt = buildGroundedSystemPrompt(a)
+		} else {
+			systemPrompt += "\n\n" + groundingSystemNote
+		}
 		history = append([]aimodels.ChatMessage{{Role: aimodels.RoleUser, Content: knowledgeContextBlock(hits)}}, history...)
 	}
 	runCtx, cancel := context.WithTimeout(ctx, livechatRunTimeout)
@@ -588,13 +602,13 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 }
 
 func relevantGroundingMatches(matches []aimodels.SearchResult) []aimodels.SearchResult {
-	relevant := make([]aimodels.SearchResult, 0, min(len(matches), 3))
+	relevant := make([]aimodels.SearchResult, 0, min(len(matches), 2))
 	for _, match := range matches {
 		if match.Score < minConfidence {
 			continue
 		}
 		relevant = append(relevant, match)
-		if len(relevant) == 3 {
+		if len(relevant) == 2 {
 			break
 		}
 	}
