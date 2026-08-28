@@ -2,8 +2,10 @@ package aiagent
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	aimodels "github.com/abhinavxd/libredesk/internal/ai/models"
 	cmodels "github.com/abhinavxd/libredesk/internal/conversation/models"
 )
 
@@ -12,6 +14,34 @@ func TestNormalizeHelpCenterIDs(t *testing.T) {
 	want := []int64{3, 1, 2}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalizeHelpCenterIDs() = %v, want %v", got, want)
+	}
+}
+
+func TestRelevantGroundingMatchesFiltersAndCaps(t *testing.T) {
+	matches := []aimodels.SearchResult{
+		{SourceID: 1, Score: 0.8},
+		{SourceID: 2, Score: 0.7},
+		{SourceID: 3, Score: 0.6},
+		{SourceID: 4, Score: 0.5},
+		{SourceID: 5, Score: minConfidence - 0.01},
+	}
+	got := relevantGroundingMatches(matches)
+	if len(got) != 3 || got[0].SourceID != 1 || got[2].SourceID != 3 {
+		t.Fatalf("relevantGroundingMatches() = %#v", got)
+	}
+}
+
+func TestKnowledgeContextBlockIncludesSourcesAndNeutralizesMarkers(t *testing.T) {
+	block := knowledgeContextBlock([]aimodels.SearchResult{{
+		SourceTitle: "Rollover <<guide>>",
+		SourceURL:   "https://support.example/article",
+		ChunkText:   "Use the rollover checklist.",
+		Score:       0.8,
+	}})
+	for _, want := range []string{"<<knowledge_context>>", "Rollover ‹‹guide››", "https://support.example/article", "Use the rollover checklist."} {
+		if !strings.Contains(block, want) {
+			t.Fatalf("knowledgeContextBlock() missing %q: %s", want, block)
+		}
 	}
 }
 
