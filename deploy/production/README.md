@@ -9,8 +9,8 @@ proxy.
 
 - Application image is pinned to the v2.8.0 multi-platform manifest digest.
 - PostgreSQL and Redis have no host-published ports.
-- Ollama has no published port and its long-running service is attached only
-  to the internal backend network. Only the one-shot model initializer receives
+- The completion and embedding Ollama services have no published ports and are
+  attached only to the internal backend network. Only the one-shot model initializer receives
   temporary egress so it can pull configured models.
 - Database, Redis, encryption, and initial system-user credentials are
   generated on the server and stored in `~/libredesk/.env` with mode 0600.
@@ -56,12 +56,17 @@ names. LibreDesk provider settings must use `http://ollama:11434/v1`; this URL
 works only inside the backend Docker network and must never be routed through
 Nginx, Cloudflare Tunnel, or a host-published port.
 
-CPU inference is intentionally serialized with `OLLAMA_NUM_PARALLEL=1` and
-`ai_agent.worker_count=1`. At most two models remain loaded. The defaults give
-Ollama 4 CPUs, 5.5 GiB RAM, a five-minute keep-alive, and a modest 4096-token
-context. Larger contexts consume more RAM and should be load-tested before
-raising `OLLAMA_CONTEXT_LENGTH`. Resource limits and keep-alive are configurable
-through the documented `OLLAMA_*` values in `.env`.
+Customer-facing completion and background embedding run in separate Ollama
+services. Completion gets up to four CPUs and a 30-minute keep-alive; embedding
+is capped at one CPU so an article reindex cannot monopolize the chat queue.
+Each service loads only its own active model. AI agent work is serialized with
+`ai_agent.worker_count=1`, and both contexts default to 4096 tokens. Larger
+contexts consume more RAM and should be load-tested before raising the relevant
+`OLLAMA_*_CONTEXT_LENGTH` value.
+
+The embedding provider URL must be `http://ollama-embedding:11434/v1`; the
+completion provider remains `http://ollama:11434/v1`. Both names resolve only
+inside the private Compose backend network.
 
 For Qwen3 completion models, set the completion provider's **Reasoning effort**
 to `none` in LibreDesk's AI provider settings. This uses Qwen's non-thinking
