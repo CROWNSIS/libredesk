@@ -4,7 +4,7 @@ Knowledge-only assistants use a scoped retrieval and evidence pipeline:
 
 1. Filter the index to the assistant's allowed help centres. Fuse semantic and title-weighted lexical ranks, remove duplicate passage content, and retain up to 12 candidates. Cosine scores remain unmodified and are not probabilities of correctness.
 2. Preserve each candidate article's introduction and ask the completion model to choose one workflow matching the operation and audience. The server restricts the next stage to that source, so teacher and administrator instructions cannot be mixed.
-3. Ask which passages from that article directly answer the question. The response is a bounded JSON list of passage numbers. Empty selections abstain; malformed, duplicate, out-of-range, or oversized selections fail closed. The server renders the selected documentation and its stored citations verbatim, never model-authored instructions or URLs.
+3. Re-rank passages within the chosen article so the global top-k cannot hide its procedure. Ask which of these passages directly answer the question. The response is a bounded JSON list of passage numbers. Empty selections abstain; malformed, duplicate, out-of-range, or oversized selections fail closed. The server renders the selected documentation and its stored citations verbatim, never model-authored instructions or URLs.
 
 Preview and live knowledge-only conversations use the same selection and rendering functions. Tool-enabled assistants retain their existing tool workflow. Published/AI-enabled/help-centre eligibility remains enforced before ranking.
 

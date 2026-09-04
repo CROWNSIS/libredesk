@@ -29,12 +29,18 @@ func TestEvaluateRetrievalCorpus(t *testing.T) {
 		t.Fatal(err)
 	}
 	type result struct {
-		Question   string                `json:"question"`
-		Candidates []models.SearchResult `json:"candidates"`
+		Question   string                        `json:"question"`
+		Candidates []models.SearchResult         `json:"candidates"`
+		Evidence   map[int][]models.SearchResult `json:"evidence"`
 	}
 	output := make([]result, 0, len(corpus))
 	for _, item := range corpus {
-		output = append(output, result{item.Question, rankHelpCandidates(item.Question, item.Semantic, 12)})
+		candidates := rankHelpCandidates(item.Question, item.Semantic, 12)
+		evidence := map[int][]models.SearchResult{}
+		for _, hit := range candidates {
+			evidence[hit.SourceID] = hit.SourcePassages
+		}
+		output = append(output, result{item.Question, candidates, evidence})
 	}
 	encoded, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {

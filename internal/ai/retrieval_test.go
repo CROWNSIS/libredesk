@@ -83,3 +83,20 @@ func TestHelpCandidatesCarryIntroductionWithLaterProcedure(t *testing.T) {
 		t.Fatal("ranking mutated its input")
 	}
 }
+
+func TestHelpCandidatesRetainEvidenceOutsideGlobalTopK(t *testing.T) {
+	hits := []models.SearchResult{
+		{SourceID: 1, Score: .9, ChunkOrder: 3, ChunkText: "Troubleshoot assignment scores"},
+		{SourceID: 2, Score: .8, ChunkText: "Assignment scores in another workflow"},
+		{SourceID: 1, Score: .6, ChunkOrder: 0, ChunkText: "Teacher gradebook: open Edit Grades and Submit."},
+	}
+	got := rankHelpCandidates("assignment scores", hits, 1)
+	if len(got) != 1 || len(got[0].SourcePassages) != 2 {
+		t.Fatalf("lost evidence outside global top-k: %#v", got)
+	}
+	for _, passage := range got[0].SourcePassages {
+		if passage.SourceID != 1 || len(passage.SourcePassages) != 0 {
+			t.Fatal("source expansion mixed workflows or nested recursively")
+		}
+	}
+}

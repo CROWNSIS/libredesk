@@ -26,6 +26,11 @@ func (m *Manager) selectEvidence(ctx context.Context, question string, matches [
 	if err != nil || len(matches) == 0 {
 		return nil, err
 	}
+	// Re-rank inside the chosen source: global top-k passages may omit its
+	// actual steps when another workflow dominates the original query.
+	if len(matches[0].SourcePassages) > 0 {
+		matches = matches[0].SourcePassages
+	}
 	return selectAnswerPassages(ctx, question, matches, func(ctx context.Context, system, input string) (string, error) {
 		schema := map[string]any{
 			"type": "object", "additionalProperties": false, "required": []string{"passages"},

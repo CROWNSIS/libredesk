@@ -148,14 +148,15 @@ type TagRef struct {
 
 // SearchResult is one hit from the in-memory embedding search.
 type SearchResult struct {
-	SourceContext string  `json:"source_context,omitempty"`
-	ChunkOrder    int     `json:"chunk_order,omitempty"`
-	SourceType    string  `json:"source_type"`
-	SourceID      int     `json:"source_id"`
-	SourceTitle   string  `json:"source_title,omitempty"`
-	SourceURL     string  `json:"source_url,omitempty"`
-	ChunkText     string  `json:"chunk_text"`
-	Score         float64 `json:"score"`
+	SourcePassages []SearchResult `json:"-"`
+	SourceContext  string         `json:"source_context,omitempty"`
+	ChunkOrder     int            `json:"chunk_order,omitempty"`
+	SourceType     string         `json:"source_type"`
+	SourceID       int            `json:"source_id"`
+	SourceTitle    string         `json:"source_title,omitempty"`
+	SourceURL      string         `json:"source_url,omitempty"`
+	ChunkText      string         `json:"chunk_text"`
+	Score          float64        `json:"score"`
 }
 
 type HelpArticleSource struct {

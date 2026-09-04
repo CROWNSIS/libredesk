@@ -13,6 +13,28 @@ import (
 // authorization. Score remains the original cosine similarity: fusion is candidate
 // selection, not an assertion that an article can answer the question.
 func rankHelpCandidates(query string, semantic []models.SearchResult, k int) []models.SearchResult {
+	results := rankHelpPassages(query, semantic, k)
+	type sourceKey struct {
+		kind string
+		id   int
+	}
+	groups := map[sourceKey][]models.SearchResult{}
+	for _, hit := range semantic {
+		key := sourceKey{hit.SourceType, hit.SourceID}
+		groups[key] = append(groups[key], hit)
+	}
+	ranked := map[sourceKey][]models.SearchResult{}
+	for i := range results {
+		key := sourceKey{results[i].SourceType, results[i].SourceID}
+		if _, ok := ranked[key]; !ok {
+			ranked[key] = rankHelpPassages(query, groups[key], 12)
+		}
+		results[i].SourcePassages = ranked[key]
+	}
+	return results
+}
+
+func rankHelpPassages(query string, semantic []models.SearchResult, k int) []models.SearchResult {
 	if len(semantic) == 0 {
 		return semantic
 	}

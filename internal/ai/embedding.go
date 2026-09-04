@@ -202,6 +202,10 @@ func (m *Manager) searchHelpCenters(ctx context.Context, query string, k int, he
 		}
 		results[i].SourceTitle = source.Title
 		results[i].SourceURL = fmt.Sprintf("%s/hc/%s/%s/articles/%s", m.baseURL, source.HelpCenterSlug, source.Locale, source.ArticleSlug)
+		for j := range results[i].SourcePassages {
+			results[i].SourcePassages[j].SourceTitle = results[i].SourceTitle
+			results[i].SourcePassages[j].SourceURL = results[i].SourceURL
+		}
 	}
 	return results, nil
 }
