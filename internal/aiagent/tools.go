@@ -100,12 +100,9 @@ func (t *searchKnowledgeTool) Execute(ctx context.Context, args string) (string,
 	if err != nil {
 		return "", err
 	}
-	topScore := 0.0
-	if len(results) > 0 {
-		topScore = results[0].Score
-	}
+	topScore := topSearchScore(results)
 	t.m.lo.Debug("ai agent knowledge search", "query_len", len(in.Query), "hits", len(results), "top_score", topScore, "min_confidence", minConfidence)
-	if len(results) == 0 || results[0].Score < minConfidence {
+	if len(results) == 0 || topSearchScore(results) < minConfidence {
 		return "No relevant information found in the knowledge base.", nil
 	}
 	var used []aimodels.SearchResult

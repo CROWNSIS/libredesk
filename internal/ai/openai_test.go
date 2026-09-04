@@ -54,6 +54,34 @@ func TestLearnedParamAdaptation(t *testing.T) {
 	}
 }
 
+func TestStructuredCompletionContract(t *testing.T) {
+	var received []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		received = append(received, body)
+		w.Write([]byte(`{"choices":[{"message":{"content":"{\"passages\":[1]}"}}]}`))
+	}))
+	defer srv.Close()
+	lo := logf.New(logf.Opts{})
+	client := NewOpenAIClient(models.ProviderConfig{BaseURL: srv.URL, APIKey: "test", Model: "test"}, &lo, srv.Client())
+	format := map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "evidence_selection", "strict": true, "schema": map[string]any{"type": "object"}}}
+	for _, responseFormat := range []map[string]any{format, nil} {
+		_, err := client.SendChatCompletion(context.Background(), models.ChatCompletionPayload{Messages: []models.ChatMessage{{Role: "user", Content: "test"}}, ResponseFormat: responseFormat})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if received[0]["response_format"].(map[string]any)["type"] != "json_schema" {
+		t.Fatal("provider must receive the output constraint")
+	}
+	if _, exists := received[1]["response_format"]; exists {
+		t.Fatal("ordinary completions must remain unconstrained")
+	}
+}
+
 func TestEmbeddingBatches(t *testing.T) {
 	// A handful of small inputs stays a single request (the common per-snippet reindex path).
 	if got := embeddingBatches([]string{"a", "b", "c"}); len(got) != 1 || got[0] != (embeddingBatch{0, 3}) {

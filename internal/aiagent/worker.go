@@ -293,14 +293,18 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 	var gateMatches []aimodels.SearchResult
 	if !isConversationControlMessage(currentMessage) {
 		gateCtx, gateCancel := context.WithTimeout(ctx, 30*time.Second)
-		matches, gateErr := m.ai.SearchHelpCenters(gateCtx, gateQuery, searchResultLimit, assistant.HelpCenterIDs)
+		matches, gateErr := m.ai.SearchHelpCenters(gateCtx, gateQuery, groundingCandidateLimit, assistant.HelpCenterIDs)
 		gateCancel()
+		if gateErr == nil && len(assistant.ToolIDs) == 0 {
+			gateMatches, gateErr = m.selectEvidence(ctx, gateQuery, matches)
+		} else if gateErr == nil {
+			gateMatches = relevantGroundingMatches(matches)
+		}
 		if gateErr != nil {
 			m.lo.Error("error enforcing AI knowledge scope", "conversation_uuid", conv.UUID, "error", gateErr)
 			m.handoff(conv, assistant, m.i18n.T("ai.agent.handoffError"))
 			return
 		}
-		gateMatches = relevantGroundingMatches(matches)
 		if len(gateMatches) == 0 {
 			m.lo.Info("AI request refused by grounding gate", "conversation_uuid", conv.UUID, "top_score", topSearchScore(matches))
 			if err := m.postReply(conv, assistant, ungroundedReply, map[string]any{"ai_grounding_refusal": true}); err != nil {
@@ -310,11 +314,10 @@ func (m *Manager) handle(ctx context.Context, convID int) {
 		}
 	}
 
-	// For knowledge-only assistants, return the retrieved passage itself. Small CPU-hosted
-	// completion models can negate or otherwise distort an article while paraphrasing it; the
-	// extractive path is both faster and keeps the help-centre text as the exact answer authority.
+	// Knowledge-only assistants render the validated evidence selection verbatim;
+	// completion chooses relevant procedures but cannot invent facts or citations.
 	if len(gateMatches) > 0 && len(assistant.ToolIDs) == 0 {
-		answer := groundedReplyWithSource(extractiveGroundedPassage(gateMatches[0]), gateMatches[0].SourceURL)
+		answer := groundedPassageReply(gateMatches)
 		if answer == "" {
 			answer = ungroundedReply
 		}
@@ -535,10 +538,11 @@ func (m *Manager) postReply(conv cmodels.Conversation, assistant models.Assistan
 }
 
 func topSearchScore(results []aimodels.SearchResult) float64 {
-	if len(results) == 0 {
-		return 0
+	var best float64
+	for _, result := range results {
+		best = max(best, result.Score)
 	}
-	return results[0].Score
+	return best
 }
 
 func groundingQuery(message string) string {
@@ -717,17 +721,21 @@ func (m *Manager) PreviewReply(ctx context.Context, assistantID int, message str
 	systemPrompt := buildSystemPrompt(a)
 	if !isConversationControlMessage(message) {
 		gateCtx, gateCancel := context.WithTimeout(ctx, 30*time.Second)
-		matches, gateErr := m.ai.SearchHelpCenters(gateCtx, message, searchResultLimit, a.HelpCenterIDs)
+		matches, gateErr := m.ai.SearchHelpCenters(gateCtx, groundingQuery(message), groundingCandidateLimit, a.HelpCenterIDs)
 		gateCancel()
+		if gateErr == nil && len(a.ToolIDs) == 0 {
+			hits, gateErr = m.selectEvidence(ctx, message, matches)
+		} else if gateErr == nil {
+			hits = relevantGroundingMatches(matches)
+		}
 		if gateErr != nil {
 			return "", nil, gateErr
 		}
-		hits = relevantGroundingMatches(matches)
 		if len(hits) == 0 {
 			return ungroundedReply, nil, nil
 		}
 		if len(a.ToolIDs) == 0 {
-			answer := groundedReplyWithSource(extractiveGroundedPassage(hits[0]), hits[0].SourceURL)
+			answer := groundedPassageReply(hits)
 			if answer == "" {
 				return ungroundedReply, nil, nil
 			}

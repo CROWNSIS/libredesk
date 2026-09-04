@@ -29,6 +29,7 @@ type indexedChunk struct {
 	sourceID     int
 	helpCenterID int
 	chunkText    string
+	chunkOrder   int
 	vec          []float32
 	norm         float32
 }
@@ -145,6 +146,7 @@ func (ix *embeddingIndex) searchWhere(query []float32, k int, allow func(indexed
 			SourceType: c.sourceType,
 			SourceID:   c.sourceID,
 			ChunkText:  c.chunkText,
+			ChunkOrder: c.chunkOrder,
 			Score:      float64(score),
 		})
 	}
@@ -186,7 +188,8 @@ func (m *Manager) searchSourcesWhere(ctx context.Context, query string, k int, a
 
 func (m *Manager) searchHelpCenters(ctx context.Context, query string, k int, helpCenterIDs map[int]bool) ([]models.SearchResult, error) {
 	results, err := m.searchWithIndex(ctx, query, []string{models.SourceHelpArticle}, func(qvec []float32) ([]models.SearchResult, int) {
-		return m.index.searchHelpCenters(qvec, k, helpCenterIDs)
+		results, skipped := m.index.searchHelpCenters(qvec, 0, helpCenterIDs)
+		return rankHelpCandidates(query, results, k), skipped
 	})
 	if err != nil {
 		return nil, err
@@ -263,6 +266,7 @@ func (m *Manager) embedSource(ctx context.Context, sourceType string, sourceID, 
 			sourceID:     sourceID,
 			helpCenterID: helpCenterID,
 			chunkText:    chunk,
+			chunkOrder:   i,
 			vec:          vecs[i],
 			norm:         norm(vecs[i]),
 		})
@@ -327,23 +331,11 @@ func (m *Manager) loadIndex() error {
 	if err := m.q.GetAllEmbeddings.Select(&rows); err != nil {
 		return err
 	}
-	chunks := make([]indexedChunk, 0, len(rows))
+	chunks := storedEmbeddingChunks(rows)
 	var vectorBytes, textBytes int
-	for _, r := range rows {
-		vec := deserializeEmbedding(r.Embedding)
-		if len(vec) == 0 {
-			continue
-		}
-		vectorBytes += len(vec) * 4
-		textBytes += len(r.ChunkText)
-		chunks = append(chunks, indexedChunk{
-			sourceType:   r.SourceType,
-			sourceID:     int(r.SourceID),
-			helpCenterID: r.HelpCenterID,
-			chunkText:    r.ChunkText,
-			vec:          vec,
-			norm:         norm(vec),
-		})
+	for _, c := range chunks {
+		vectorBytes += len(c.vec) * 4
+		textBytes += len(c.chunkText)
 	}
 	m.index.replaceAll(chunks)
 	dimensions := 0
@@ -354,6 +346,38 @@ func (m *Manager) loadIndex() error {
 		"vector_bytes", vectorBytes, "text_bytes", textBytes,
 		"approx_mb", math.Round(float64(vectorBytes+textBytes)/(1024*1024)*100)/100)
 	return nil
+}
+
+// Chunks are inserted sequentially in document order by commitEmbeddings. Sort
+// their durable IDs explicitly because SQL row order without ORDER BY is undefined.
+// Source type is part of identity: articles and snippets can share numeric IDs.
+func storedEmbeddingChunks(rows []models.Embedding) []indexedChunk {
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	type sourceKey struct {
+		kind string
+		id   int64
+	}
+	orders := map[sourceKey]int{}
+	chunks := make([]indexedChunk, 0, len(rows))
+	for _, r := range rows {
+		key := sourceKey{r.SourceType, r.SourceID}
+		order := orders[key]
+		orders[key]++
+		vec := deserializeEmbedding(r.Embedding)
+		if len(vec) == 0 {
+			continue
+		}
+		chunks = append(chunks, indexedChunk{
+			sourceType:   r.SourceType,
+			sourceID:     int(r.SourceID),
+			helpCenterID: r.HelpCenterID,
+			chunkText:    r.ChunkText,
+			chunkOrder:   order,
+			vec:          vec,
+			norm:         norm(vec),
+		})
+	}
+	return chunks
 }
 
 // Run periodically reconciles knowledge base embeddings.

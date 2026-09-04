@@ -148,6 +148,7 @@ type TagRef struct {
 
 // SearchResult is one hit from the in-memory embedding search.
 type SearchResult struct {
+	ChunkOrder  int     `json:"chunk_order,omitempty"`
 	SourceType  string  `json:"source_type"`
 	SourceID    int     `json:"source_id"`
 	SourceTitle string  `json:"source_title,omitempty"`
@@ -245,8 +246,9 @@ type PromptPayload struct {
 }
 
 type ChatCompletionPayload struct {
-	Messages []ChatMessage `json:"messages"`
-	Tools    []ToolDef     `json:"tools,omitempty"`
+	Messages       []ChatMessage  `json:"messages"`
+	Tools          []ToolDef      `json:"tools,omitempty"`
+	ResponseFormat map[string]any `json:"response_format,omitempty"`
 }
 
 // ChatCompletionResult is the parsed assistant turn: either text or tool calls.

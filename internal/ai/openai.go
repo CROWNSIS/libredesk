@@ -146,6 +146,9 @@ func (o *OpenAIClient) SendChatCompletion(ctx context.Context, payload models.Ch
 	if o.cfg.ReasoningEffort != "" {
 		body["reasoning_effort"] = o.cfg.ReasoningEffort
 	}
+	if payload.ResponseFormat != nil {
+		body["response_format"] = payload.ResponseFormat
+	}
 	if len(payload.Tools) > 0 {
 		body["tools"] = payload.Tools
 		body["tool_choice"] = "auto"

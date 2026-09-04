@@ -210,6 +210,23 @@ func (m *Manager) CompletionRaw(ctx context.Context, systemPrompt, userPrompt st
 	return response, nil
 }
 
+// CompletionWithSchema constrains a completion's output without changing other
+// prompts or globally changing the provider configuration.
+func (m *Manager) CompletionWithSchema(ctx context.Context, systemPrompt, userPrompt string, schema map[string]any) (string, error) {
+	client, err := m.getProviderClient(models.ProviderTypeCompletion)
+	if err != nil {
+		return "", err
+	}
+	response, err := client.SendChatCompletion(ctx, models.ChatCompletionPayload{
+		Messages:       []models.ChatMessage{{Role: models.RoleSystem, Content: systemPrompt}, {Role: models.RoleUser, Content: userPrompt}},
+		ResponseFormat: map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "evidence_selection", "strict": true, "schema": schema}},
+	})
+	if err != nil {
+		return "", m.providerError(err)
+	}
+	return response.Content, nil
+}
+
 // GetEmbeddings returns the embedding vector for text using the embedding provider.
 func (m *Manager) GetEmbeddings(ctx context.Context, text string) ([]float32, error) {
 	client, err := m.getProviderClient(models.ProviderTypeEmbedding)
