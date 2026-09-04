@@ -17,6 +17,27 @@ func rankHelpCandidates(query string, semantic []models.SearchResult, k int) []m
 		return semantic
 	}
 	terms := retrievalTerms(query)
+	// Carry the source introduction with procedural chunks so audience and
+	// prerequisites do not disappear when a later section ranks more highly.
+	type sourceKey struct {
+		kind string
+		id   int
+	}
+	introductions := map[sourceKey]models.SearchResult{}
+	for _, hit := range semantic {
+		key := sourceKey{hit.SourceType, hit.SourceID}
+		if old, ok := introductions[key]; !ok || hit.ChunkOrder < old.ChunkOrder {
+			introductions[key] = hit
+		}
+	}
+	semantic = append([]models.SearchResult(nil), semantic...)
+	for i := range semantic {
+		context := introductions[sourceKey{semantic[i].SourceType, semantic[i].SourceID}].ChunkText
+		if runes := []rune(context); len(runes) > 1200 {
+			context = string(runes[:1200])
+		}
+		semantic[i].SourceContext = context
+	}
 	tfs := make([]map[string]float64, len(semantic))
 	lengths := make([]float64, len(semantic))
 	df := map[string]int{}

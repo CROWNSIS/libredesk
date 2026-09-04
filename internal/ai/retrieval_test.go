@@ -68,3 +68,18 @@ func TestHelpCandidatesScopeBeforeFusion(t *testing.T) {
 		t.Fatalf("empty scope must fail closed: %#v", got)
 	}
 }
+
+func TestHelpCandidatesCarryIntroductionWithLaterProcedure(t *testing.T) {
+	hits := []models.SearchResult{
+		{SourceID: 1, ChunkOrder: 3, Score: .9, ChunkText: "Enter scores and submit."},
+		{SourceID: 1, ChunkOrder: 0, Score: .4, ChunkText: "For authorized administrators acting on behalf of teachers."},
+		{SourceID: 2, ChunkOrder: 0, Score: .3, ChunkText: "Teacher workflow for your own class."},
+	}
+	got := rankHelpCandidates("enter scores", hits, 1)
+	if len(got) != 1 || got[0].SourceContext != hits[1].ChunkText {
+		t.Fatalf("lost source audience while ranking procedural chunk: %#v", got)
+	}
+	if hits[0].SourceContext != "" {
+		t.Fatal("ranking mutated its input")
+	}
+}
