@@ -10,7 +10,7 @@
                     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke-linecap="round"/></svg>
                 </button>
                 <a class="hcd-brand" href="{{ .Data.HelpCenter.BasePath }}">
-                    {{ if .Data.HelpCenter.LogoURL }}<img src="{{ .Data.HelpCenter.LogoURL }}" alt="{{ .Data.HelpCenter.Name }}" />{{ else }}<span class="hcd-brand-name">{{ .Data.HelpCenter.Name }}</span>{{ end }}
+                    {{ if .Data.HelpCenter.LogoURL }}<img src="{{ .Data.HelpCenter.LogoURL }}" alt="" aria-hidden="true" />{{ end }}<span class="hcd-brand-name">{{ .Data.HelpCenter.Name }}</span>
                 </a>
             </div>
             <a class="hcd-search-btn" href="{{ .Data.HelpCenter.BasePath }}/search" data-hcd-search-open>

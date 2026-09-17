@@ -6,7 +6,7 @@
     <header class="hc-top">
         <nav class="hc-nav" aria-label="{{ .L.T "globals.terms.main" }}">
             <a class="hc-brand" href="{{ .Data.HelpCenter.BasePath }}">
-                {{ if .Data.HelpCenter.LogoURL }}<img src="{{ .Data.HelpCenter.LogoURL }}" alt="{{ .Data.HelpCenter.Name }}" />{{ else }}<span class="hc-name">{{ .Data.HelpCenter.Name }}</span>{{ end }}
+                {{ if .Data.HelpCenter.LogoURL }}<img src="{{ .Data.HelpCenter.LogoURL }}" alt="" aria-hidden="true" />{{ end }}<span class="hc-name">{{ .Data.HelpCenter.Name }}</span>
             </a>
             {{ if or .Data.HelpCenter.NavLinks (gt (len .Data.HelpCenter.AvailableLocales) 1) }}
             <button type="button" class="hc-nav-toggle" data-hc-nav-toggle aria-expanded="false" aria-controls="hc-nav-links" aria-label="{{ .L.T "globals.terms.menu" }}">
